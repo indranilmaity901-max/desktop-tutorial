@@ -1,28 +1,24 @@
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from xml.sax.saxutils import escape
+from db import (
+    DatabaseConfigError,
+    DatabaseError,
+    DatabaseIntegrityError,
+    execute,
+    execute_many,
+    row,
+    rows,
+    scalar,
+)
 import io
 import json
 import mimetypes
 import os
-import sqlite3
 import urllib.parse
 import zipfile
 
 ROOT = Path(__file__).resolve().parent
-DB = ROOT / "data" / "wpacs.db"
-
-
-def rows(query, parameters=()):
-    with sqlite3.connect(DB) as connection:
-        connection.row_factory = sqlite3.Row
-        return [dict(row) for row in connection.execute(query, parameters)]
-
-
-def scalar(query, parameters=(), default=0):
-    with sqlite3.connect(DB) as connection:
-        value = connection.execute(query, parameters).fetchone()
-        return value[0] if value and value[0] is not None else default
 
 
 def latest_metric_date():
@@ -141,7 +137,7 @@ def dashboard_payload():
             for item in rows("""
                 SELECT
                   substr(metric_date, 9, 2) AS label,
-                  ROUND(AVG(productive_percentage)) AS value
+                  ROUND(AVG(productive_percentage))::integer AS value
                 FROM productivity_logs
                 GROUP BY metric_date
                 ORDER BY metric_date DESC
@@ -221,7 +217,7 @@ def report_rows(report_type, metric_date):
                   SUM(CASE WHEN attendance_status = 'PARTIAL' THEN 1 ELSE 0 END) AS partial,
                   SUM(CASE WHEN attendance_status = 'ABSENT' THEN 1 ELSE 0 END) AS absent,
                   SUM(CASE WHEN attendance_status = 'LEAVE' THEN 1 ELSE 0 END) AS leave_count,
-                  ROUND(COALESCE(SUM(worked_minutes), 0) / 60.0, 2) AS worked_hours
+                  ROUND((COALESCE(SUM(worked_minutes), 0) / 60.0)::numeric, 2)::float AS worked_hours
                 FROM attendance_logs
                 WHERE attendance_date = ?
                 """,
@@ -240,8 +236,8 @@ def report_rows(report_type, metric_date):
               p.employee_id,
               e.employee_name,
               e.department,
-              ROUND(p.productive_minutes / 60.0, 2) AS productive_hours,
-              ROUND(p.non_productive_minutes / 60.0, 2) AS non_productive_hours,
+              ROUND((p.productive_minutes / 60.0)::numeric, 2)::float AS productive_hours,
+              ROUND((p.non_productive_minutes / 60.0)::numeric, 2)::float AS non_productive_hours,
               p.productive_percentage
             FROM productivity_logs p
             JOIN employees e ON e.employee_id = p.employee_id
@@ -344,6 +340,16 @@ def column_key(label):
 
 
 class Handler(SimpleHTTPRequestHandler):
+    def host_name(self):
+        return self.headers.get("Host", "").split(":", 1)[0].lower()
+
+    def is_agent_host(self):
+        return self.host_name() == "agent.wpacs.com"
+
+    def read_json_body(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        return json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+
     def send_json(self, status, payload):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
@@ -352,30 +358,75 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def health_payload(self, surface):
+        employee_count = scalar("SELECT COUNT(*) FROM employees")
+        return {
+            "success": True,
+            "surface": surface,
+            "api": "HEALTHY",
+            "database": "HEALTHY",
+            "database_engine": "postgresql",
+            "employee_count": employee_count,
+            "host": self.host_name() or "unknown",
+        }
+
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/agent/v1/events":
+            payload = self.read_json_body()
+            agent_id = payload.get("agent_id") or payload.get("workstation_id") or "unknown"
+            events = payload.get("events") if isinstance(payload.get("events"), list) else [payload]
+            event_rows = [
+                (
+                    agent_id,
+                    event.get("type") or event.get("event_type") or "UNKNOWN",
+                    event.get("occurred_at") or event.get("timestamp"),
+                    json.dumps(event),
+                )
+                for event in events
+                if isinstance(event, dict)
+            ]
+            if event_rows:
+                execute_many(
+                    """
+                    INSERT INTO agent_events (
+                      agent_id,
+                      event_type,
+                      occurred_at,
+                      payload
+                    )
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    event_rows,
+                )
+            self.send_json(202, {
+                "success": True,
+                "data": {
+                    "received": True,
+                    "agent_id": agent_id,
+                    "event_count": len(event_rows),
+                },
+                "message": "Agent event payload accepted",
+                "errors": [],
+            })
+            return
+
         if parsed.path == "/api/v1/auth/login":
-            length = int(self.headers.get("Content-Length", "0"))
-            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+            payload = self.read_json_body()
             role_name = payload.get("role_name", "")
             username = payload.get("username", "")
             password_hash = payload.get("password_hash", "")
 
-            with sqlite3.connect(DB) as connection:
-                connection.row_factory = sqlite3.Row
-                user = connection.execute(
-                    """
-                    SELECT user_id, username, status, created_date
-                    FROM app_users
-                    WHERE username = ?
-                      AND password_hash = ?
-                    """,
-                    (username, password_hash),
-                ).fetchone()
-                role = connection.execute(
-                    "SELECT role_id, role_name FROM app_roles WHERE role_name = ?",
-                    (role_name,),
-                ).fetchone()
+            user = row(
+                """
+                SELECT user_id, username, status, created_date
+                FROM app_users
+                WHERE username = ?
+                  AND password_hash = ?
+                """,
+                (username, password_hash),
+            )
+            role = row("SELECT role_id, role_name FROM app_roles WHERE role_name = ?", (role_name,))
 
             if not role:
                 body = json.dumps({
@@ -404,7 +455,7 @@ class Handler(SimpleHTTPRequestHandler):
             else:
                 body = json.dumps({
                     "success": True,
-                    "data": {**dict(user), **dict(role)},
+                    "data": {**user, **role},
                     "message": "Login successful",
                     "errors": [],
                 }).encode("utf-8")
@@ -417,8 +468,7 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/v1/employees":
-            length = int(self.headers.get("Content-Length", "0"))
-            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+            payload = self.read_json_body()
             required = ["employee_id", "employee_name", "department", "manager_id", "status"]
             missing = [field for field in required if not payload.get(field)]
 
@@ -432,45 +482,41 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_response(422)
             else:
                 try:
-                    with sqlite3.connect(DB) as connection:
-                        manager = connection.execute(
-                            "SELECT manager_id FROM managers WHERE manager_id = ?",
-                            (payload["manager_id"],),
-                        ).fetchone()
+                    manager = row("SELECT manager_id FROM managers WHERE manager_id = ?", (payload["manager_id"],))
 
-                        if not manager:
-                            body = json.dumps({
-                                "success": False,
-                                "data": {},
-                                "message": "Manager not found",
-                                "errors": [{"field": "manager_id", "error": "Not found"}],
-                            }).encode("utf-8")
-                            self.send_response(404)
-                            self.send_header("Content-Type", "application/json")
-                            self.send_header("Content-Length", str(len(body)))
-                            self.end_headers()
-                            self.wfile.write(body)
-                            return
+                    if not manager:
+                        body = json.dumps({
+                            "success": False,
+                            "data": {},
+                            "message": "Manager not found",
+                            "errors": [{"field": "manager_id", "error": "Not found"}],
+                        }).encode("utf-8")
+                        self.send_response(404)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_header("Content-Length", str(len(body)))
+                        self.end_headers()
+                        self.wfile.write(body)
+                        return
 
-                        connection.execute(
-                            """
-                            INSERT INTO employees (
-                              employee_id,
-                              employee_name,
-                              department,
-                              manager_id,
-                              status
-                            )
-                            VALUES (?, ?, ?, ?, ?)
-                            """,
-                            (
-                                payload["employee_id"],
-                                payload["employee_name"],
-                                payload["department"],
-                                payload["manager_id"],
-                                payload["status"],
-                            ),
+                    execute(
+                        """
+                        INSERT INTO employees (
+                          employee_id,
+                          employee_name,
+                          department,
+                          manager_id,
+                          status
                         )
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (
+                            payload["employee_id"],
+                            payload["employee_name"],
+                            payload["department"],
+                            payload["manager_id"],
+                            payload["status"],
+                        ),
+                    )
                     body = json.dumps({
                         "success": True,
                         "data": {
@@ -484,7 +530,7 @@ class Handler(SimpleHTTPRequestHandler):
                         "errors": [],
                     }).encode("utf-8")
                     self.send_response(201)
-                except sqlite3.IntegrityError:
+                except DatabaseIntegrityError:
                     body = json.dumps({
                         "success": False,
                         "data": {},
@@ -500,8 +546,7 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/v1/attendance-logs":
-            length = int(self.headers.get("Content-Length", "0"))
-            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+            payload = self.read_json_body()
             required = ["employee_id", "attendance_date", "attendance_status", "worked_minutes"]
             missing = [field for field in required if payload.get(field) in (None, "")]
 
@@ -532,57 +577,53 @@ class Handler(SimpleHTTPRequestHandler):
             marked_by_user = payload.get("marked_by_user") or "admin"
 
             try:
-                with sqlite3.connect(DB) as connection:
-                    employee = connection.execute(
-                        "SELECT employee_id FROM employees WHERE employee_id = ?",
-                        (payload["employee_id"],),
-                    ).fetchone()
+                employee = row("SELECT employee_id FROM employees WHERE employee_id = ?", (payload["employee_id"],))
 
-                    if not employee:
-                        self.send_json(404, {
-                            "success": False,
-                            "data": {},
-                            "message": "Employee not found",
-                            "errors": [{"field": "employee_id", "error": "Not found"}],
-                        })
-                        return
+                if not employee:
+                    self.send_json(404, {
+                        "success": False,
+                        "data": {},
+                        "message": "Employee not found",
+                        "errors": [{"field": "employee_id", "error": "Not found"}],
+                    })
+                    return
 
-                    connection.execute(
-                        """
-                        INSERT INTO attendance_logs (
-                          attendance_id,
-                          employee_id,
-                          attendance_date,
-                          attendance_status,
-                          scheduled_minutes,
-                          worked_minutes,
-                          marked_by_role,
-                          marked_by_user,
-                          created_at
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(attendance_id) DO UPDATE SET
-                          employee_id = excluded.employee_id,
-                          attendance_date = excluded.attendance_date,
-                          attendance_status = excluded.attendance_status,
-                          scheduled_minutes = excluded.scheduled_minutes,
-                          worked_minutes = excluded.worked_minutes,
-                          marked_by_role = excluded.marked_by_role,
-                          marked_by_user = excluded.marked_by_user,
-                          created_at = excluded.created_at
-                        """,
-                        (
-                            attendance_id,
-                            payload["employee_id"],
-                            attendance_date,
-                            payload["attendance_status"],
-                            scheduled_minutes,
-                            worked_minutes,
-                            marked_by_role,
-                            marked_by_user,
-                            f"{attendance_date}T09:00:00Z",
-                        ),
+                execute(
+                    """
+                    INSERT INTO attendance_logs (
+                      attendance_id,
+                      employee_id,
+                      attendance_date,
+                      attendance_status,
+                      scheduled_minutes,
+                      worked_minutes,
+                      marked_by_role,
+                      marked_by_user,
+                      created_at
                     )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(attendance_id) DO UPDATE SET
+                      employee_id = excluded.employee_id,
+                      attendance_date = excluded.attendance_date,
+                      attendance_status = excluded.attendance_status,
+                      scheduled_minutes = excluded.scheduled_minutes,
+                      worked_minutes = excluded.worked_minutes,
+                      marked_by_role = excluded.marked_by_role,
+                      marked_by_user = excluded.marked_by_user,
+                      created_at = excluded.created_at
+                    """,
+                    (
+                        attendance_id,
+                        payload["employee_id"],
+                        attendance_date,
+                        payload["attendance_status"],
+                        scheduled_minutes,
+                        worked_minutes,
+                        marked_by_role,
+                        marked_by_user,
+                        f"{attendance_date}T09:00:00Z",
+                    ),
+                )
 
                 self.send_json(201, {
                     "success": True,
@@ -600,7 +641,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "errors": [],
                 })
                 return
-            except sqlite3.IntegrityError:
+            except DatabaseIntegrityError:
                 self.send_json(409, {
                     "success": False,
                     "data": {},
@@ -616,24 +657,20 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path.startswith("/api/v1/employees/"):
             employee_id = urllib.parse.unquote(parsed.path.rsplit("/", 1)[-1])
-            with sqlite3.connect(DB) as connection:
-                existing = connection.execute(
-                    "SELECT employee_id FROM employees WHERE employee_id = ?",
-                    (employee_id,),
-                ).fetchone()
+            existing = row("SELECT employee_id FROM employees WHERE employee_id = ?", (employee_id,))
 
-                if not existing:
-                    self.send_json(404, {
-                        "success": False,
-                        "data": {},
-                        "message": "Employee not found",
-                        "errors": [{"field": "employee_id", "error": "Not found"}],
-                    })
-                    return
+            if not existing:
+                self.send_json(404, {
+                    "success": False,
+                    "data": {},
+                    "message": "Employee not found",
+                    "errors": [{"field": "employee_id", "error": "Not found"}],
+                })
+                return
 
-                connection.execute("DELETE FROM productivity_logs WHERE employee_id = ?", (employee_id,))
-                connection.execute("DELETE FROM attendance_logs WHERE employee_id = ?", (employee_id,))
-                connection.execute("DELETE FROM employees WHERE employee_id = ?", (employee_id,))
+            execute("DELETE FROM productivity_logs WHERE employee_id = ?", (employee_id,))
+            execute("DELETE FROM attendance_logs WHERE employee_id = ?", (employee_id,))
+            execute("DELETE FROM employees WHERE employee_id = ?", (employee_id,))
 
             self.send_json(200, {
                 "success": True,
@@ -648,6 +685,31 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path in ("/health", "/api/health", "/api/v1/health", "/agent/v1/health"):
+            surface = "agent" if parsed.path.startswith("/agent/") or self.is_agent_host() else "dashboard"
+            try:
+                self.send_json(200, self.health_payload(surface))
+            except (DatabaseConfigError, DatabaseError) as error:
+                self.send_json(503, {
+                    "success": False,
+                    "surface": surface,
+                    "api": "HEALTHY",
+                    "database": "UNHEALTHY",
+                    "database_engine": "postgresql",
+                    "message": str(error),
+                    "host": self.host_name() or "unknown",
+                })
+            return
+
+        if self.is_agent_host() and not parsed.path.startswith("/agent/"):
+            self.send_json(200, {
+                "success": True,
+                "surface": "agent",
+                "message": "WPACS agent API service",
+                "endpoints": ["/agent/v1/health", "/agent/v1/events"],
+            })
+            return
+
         if parsed.path == "/api/live-dashboard":
             body = json.dumps(dashboard_payload()).encode("utf-8")
             self.send_response(200)
@@ -763,27 +825,25 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/v1/reports/attendance-daily":
             query = urllib.parse.parse_qs(parsed.query)
             metric_date = query.get("metric_date", [latest_metric_date()])[0]
-            with sqlite3.connect(DB) as connection:
-                connection.row_factory = sqlite3.Row
-                summary = connection.execute(
-                    """
-                    SELECT
-                      COUNT(*) AS logged_employees,
-                      COALESCE(SUM(p.productive_minutes), 0) AS productive_minutes,
-                      COALESCE(SUM(p.non_productive_minutes), 0) AS non_productive_minutes,
-                      COALESCE(ROUND(AVG(p.productive_percentage), 2), 0) AS average_productive_percentage
-                    FROM attendance_logs a
-                    LEFT JOIN productivity_logs p
-                      ON p.employee_id = a.employee_id
-                     AND p.metric_date = a.attendance_date
-                    WHERE a.attendance_date = ?
-                    """,
-                    (metric_date,),
-                ).fetchone()
+            summary = row(
+                """
+                SELECT
+                  COUNT(*) AS logged_employees,
+                  COALESCE(SUM(p.productive_minutes), 0) AS productive_minutes,
+                  COALESCE(SUM(p.non_productive_minutes), 0) AS non_productive_minutes,
+                  COALESCE(ROUND(AVG(p.productive_percentage)::numeric, 2), 0)::float AS average_productive_percentage
+                FROM attendance_logs a
+                LEFT JOIN productivity_logs p
+                  ON p.employee_id = a.employee_id
+                 AND p.metric_date = a.attendance_date
+                WHERE a.attendance_date = ?
+                """,
+                (metric_date,),
+            )
 
             self.send_json(200, {
                 "success": True,
-                "data": {"metric_date": metric_date, **dict(summary)},
+                "data": {"metric_date": metric_date, **summary},
                 "message": "Daily attendance report retrieved successfully",
                 "errors": [],
             })
@@ -792,29 +852,24 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/v1/reports/productivity-daily":
             query = urllib.parse.parse_qs(parsed.query)
             metric_date = query.get("metric_date", [latest_metric_date()])[0]
-            with sqlite3.connect(DB) as connection:
-                connection.row_factory = sqlite3.Row
-                items = [
-                    dict(row)
-                    for row in connection.execute(
-                        """
-                        SELECT
-                          p.productivity_id,
-                          p.employee_id,
-                          e.employee_name,
-                          e.department,
-                          p.productive_minutes,
-                          p.non_productive_minutes,
-                          p.productive_percentage,
-                          p.metric_date
-                        FROM productivity_logs p
-                        JOIN employees e ON e.employee_id = p.employee_id
-                        WHERE p.metric_date = ?
-                        ORDER BY p.productive_percentage DESC, e.employee_name
-                        """,
-                        (metric_date,),
-                    )
-                ]
+            items = rows(
+                """
+                SELECT
+                  p.productivity_id,
+                  p.employee_id,
+                  e.employee_name,
+                  e.department,
+                  p.productive_minutes,
+                  p.non_productive_minutes,
+                  p.productive_percentage,
+                  p.metric_date
+                FROM productivity_logs p
+                JOIN employees e ON e.employee_id = p.employee_id
+                WHERE p.metric_date = ?
+                ORDER BY p.productive_percentage DESC, e.employee_name
+                """,
+                (metric_date,),
+            )
 
             self.send_json(200, {
                 "success": True,
@@ -846,30 +901,6 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header("Content-Length", str(len(content)))
             self.end_headers()
             self.wfile.write(content)
-            return
-
-        if parsed.path == "/api/health":
-            try:
-                employee_count = scalar("SELECT COUNT(*) FROM employees")
-                body = json.dumps({
-                    "api": "HEALTHY",
-                    "database": "HEALTHY",
-                    "database_path": str(DB),
-                    "employee_count": employee_count,
-                }).encode("utf-8")
-                self.send_response(200)
-            except sqlite3.Error as error:
-                body = json.dumps({
-                    "api": "HEALTHY",
-                    "database": "UNHEALTHY",
-                    "database_path": str(DB),
-                    "message": str(error),
-                }).encode("utf-8")
-                self.send_response(503)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
             return
 
         return super().do_GET()

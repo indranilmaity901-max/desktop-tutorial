@@ -1,104 +1,140 @@
-# WPACS Render Deployment
+# WPACS Cloud Deployment
 
-WPACS has a live Python backend and SQLite database. Production-style deployment must run `live_server.py`; static-only hosting is only a frontend preview.
+This deployment is for the real WPACS backend app. It is not a static Netlify/Vercel/GitHub Pages deployment.
 
-## Production Target
+## Required Public URLs
 
 ```text
 https://dashboard.wpacs.com
+https://agent.wpacs.com
 ```
 
-## Live Backend App
+One Render web service serves both hostnames:
 
-Use this mode for login, employees, attendance, productivity reports, API routes, Excel/PDF downloads, and SQLite-backed data.
+- `dashboard.wpacs.com` serves the dashboard UI and dashboard APIs.
+- `agent.wpacs.com` serves the agent API surface.
 
-### Render Blueprint
+## Cloud PostgreSQL
 
-This repository includes `render.yaml`.
+Use Supabase PostgreSQL or Neon PostgreSQL.
 
-```yaml
-services:
-  - type: web
-    name: wpacs-dashboard
-    runtime: python
-    plan: free
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python scripts/init_sql.py && python live_server.py"
-    envVars:
-      - key: HOST
-        value: 0.0.0.0
-      - key: PUBLIC_URL
-        value: https://dashboard.wpacs.com
-```
-
-### Render Manual Web Service Settings
-
-If creating the service manually, use:
+The app reads the database connection from:
 
 ```text
-Runtime: Python
-Build command: pip install -r requirements.txt
-Start command: python scripts/init_sql.py && python live_server.py
+DATABASE_URL
+```
+
+Production data must live in PostgreSQL. Do not rely on local SQLite files for production.
+
+### Supabase Setup
+
+1. Create a Supabase project.
+2. Open Project Settings > Database.
+3. Copy the PostgreSQL connection string.
+4. Use the pooled connection string if Supabase recommends it for serverless/web-service usage.
+5. Store it in Render as `DATABASE_URL`.
+
+Typical format:
+
+```text
+postgresql://postgres:<password>@<host>:5432/postgres
+```
+
+### Neon Setup
+
+1. Create a Neon project.
+2. Create or select the production branch.
+3. Copy the connection string from the Neon dashboard.
+4. Store it in Render as `DATABASE_URL`.
+
+Typical format:
+
+```text
+postgresql://<user>:<password>@<host>/<database>?sslmode=require
+```
+
+## PostgreSQL Migration / Init
+
+The production initializer is:
+
+```bash
+python scripts/init_postgres.py
+```
+
+It applies:
+
+```text
+sql/schema_postgres.sql
+sql/seed_postgres.sql
+```
+
+Then it seeds the generated manager, employee, attendance, and productivity demo data.
+
+## Render Setup
+
+Create a Render Web Service or Blueprint from this GitHub repo.
+
+Build command:
+
+```bash
+pip install -r requirements.txt
+```
+
+Start command:
+
+```bash
+python scripts/init_postgres.py && python live_server.py
 ```
 
 Environment variables:
 
 ```text
+DATABASE_URL=<supabase-or-neon-postgres-url>
 HOST=0.0.0.0
 PUBLIC_URL=https://dashboard.wpacs.com
 ```
 
-Do not set `PORT` manually. Render injects `PORT`, and `live_server.py` reads it automatically.
+Do not set `PORT`. Render injects it, and `live_server.py` reads it automatically.
 
-### Why The Start Command Initializes SQLite
+## Health Checks
 
-The start command runs:
-
-```bash
-python scripts/init_sql.py && python live_server.py
-```
-
-This creates `data/wpacs.db`, applies `sql/schema.sql`, loads `sql/seed.sql`, and seeds employee, attendance, productivity, manager, user, role, report, readiness, trust, and workstation-agent demo data before the server starts.
-
-Render instances have ephemeral filesystems on the free/native web service path. The current SQLite setup is appropriate for a seeded prototype/live demo. For durable production data, attach persistent storage or migrate to a managed database later.
-
-## Local Verification
-
-Run:
-
-```bash
-python scripts/init_sql.py
-HOST=127.0.0.1 PORT=4190 PUBLIC_URL=http://127.0.0.1:4190 python live_server.py
-```
-
-Windows PowerShell:
-
-```powershell
-$env:HOST = "127.0.0.1"
-$env:PORT = "4190"
-$env:PUBLIC_URL = "http://127.0.0.1:4190"
-python scripts/init_sql.py
-python live_server.py
-```
-
-Check:
+Dashboard/general:
 
 ```text
-http://127.0.0.1:4190/
-http://127.0.0.1:4190/src/main.js
-http://127.0.0.1:4190/src/styles.css
-http://127.0.0.1:4190/api/health
-http://127.0.0.1:4190/api/live-dashboard
-http://127.0.0.1:4190/api/v1/employees
+https://dashboard.wpacs.com/health
+https://dashboard.wpacs.com/api/v1/health
 ```
 
-Demo login:
+Agent:
 
 ```text
-admin / admin_hash_001
+https://agent.wpacs.com/agent/v1/health
 ```
 
-## Custom Domain On Render
+## Agent API Surface
+
+The agent hostname is reserved for workstation-agent communication:
+
+```text
+GET  /agent/v1/health
+POST /agent/v1/events
+```
+
+Example event post:
+
+```json
+{
+  "agent_id": "WPACSAgent-001",
+  "events": [
+    {
+      "type": "LOCK",
+      "occurred_at": "2026-06-13T09:00:00Z"
+    }
+  ]
+}
+```
+
+## Custom Domains
 
 After the Render service is deployed:
 
@@ -108,35 +144,27 @@ After the Render service is deployed:
 
 ```text
 dashboard.wpacs.com
+agent.wpacs.com
 ```
 
-4. Render will provide a DNS target.
+4. Render will show a target hostname.
 5. In the DNS provider for `wpacs.com`, create:
 
 ```text
-Type: CNAME
-Name: dashboard
-Value: <render-provided-target>
+dashboard.wpacs.com  CNAME  <your-render-service>.onrender.com
+agent.wpacs.com      CNAME  <your-render-service>.onrender.com
 ```
 
 6. Wait for DNS propagation.
-7. Confirm Render issues HTTPS for `https://dashboard.wpacs.com`.
-8. Update `PUBLIC_URL` in Render if needed:
+7. Confirm Render issues TLS certificates for both hostnames.
 
-```text
-PUBLIC_URL=https://dashboard.wpacs.com
-```
+## Static Preview Warning
 
-Use Render's DNS target for the backend app. Do not point `dashboard.wpacs.com` to GitHub Pages if you want API routes and SQLite behavior.
-
-## Static Preview Only
-
-The repository still contains static deployment configs for GitHub Pages, Netlify, and Vercel. These are not full production deployments because they cannot run:
+The Netlify/Vercel/GitHub Pages configs are preview-only. They cannot run:
 
 - `live_server.py`
+- PostgreSQL migrations
 - `/api/v1/*`
 - `/api/live-dashboard`
-- SQLite-backed writes
-- Excel/PDF report downloads
-
-Use static hosting only for a visual preview.
+- `/agent/v1/*`
+- report downloads

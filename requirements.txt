@@ -1,1 +1,1 @@
-# WPACS uses only the Python standard library for the current live dashboard server.
+psycopg[binary]==3.2.9
