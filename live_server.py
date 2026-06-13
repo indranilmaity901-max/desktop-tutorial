@@ -849,8 +849,23 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/health":
-            body = json.dumps({"database": "HEALTHY", "api": "HEALTHY"}).encode("utf-8")
-            self.send_response(200)
+            try:
+                employee_count = scalar("SELECT COUNT(*) FROM employees")
+                body = json.dumps({
+                    "api": "HEALTHY",
+                    "database": "HEALTHY",
+                    "database_path": str(DB),
+                    "employee_count": employee_count,
+                }).encode("utf-8")
+                self.send_response(200)
+            except sqlite3.Error as error:
+                body = json.dumps({
+                    "api": "HEALTHY",
+                    "database": "UNHEALTHY",
+                    "database_path": str(DB),
+                    "message": str(error),
+                }).encode("utf-8")
+                self.send_response(503)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -876,7 +891,7 @@ class Handler(SimpleHTTPRequestHandler):
 mimetypes.add_type("text/javascript", ".js")
 
 if __name__ == "__main__":
-    host = os.environ.get("HOST", "127.0.0.1")
+    host = os.environ.get("HOST", "0.0.0.0")
     port = int(os.environ.get("PORT", "4190"))
     public_url = os.environ.get("PUBLIC_URL", f"http://{host}:{port}")
     server = ThreadingHTTPServer((host, port), Handler)

@@ -1,90 +1,142 @@
-# WPACS Dashboard Deployment
+# WPACS Render Deployment
 
-WPACS currently has two deployment modes.
+WPACS has a live Python backend and SQLite database. Production-style deployment must run `live_server.py`; static-only hosting is only a frontend preview.
 
-## Production Website
-
-Target public URL:
+## Production Target
 
 ```text
 https://dashboard.wpacs.com
 ```
 
-To make this active, deploy the live SQL dashboard to a web host, then create a DNS `CNAME` record for:
+## Live Backend App
+
+Use this mode for login, employees, attendance, productivity reports, API routes, Excel/PDF downloads, and SQLite-backed data.
+
+### Render Blueprint
+
+This repository includes `render.yaml`.
+
+```yaml
+services:
+  - type: web
+    name: wpacs-dashboard
+    runtime: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python scripts/init_sql.py && python live_server.py"
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: PUBLIC_URL
+        value: https://dashboard.wpacs.com
+```
+
+### Render Manual Web Service Settings
+
+If creating the service manually, use:
+
+```text
+Runtime: Python
+Build command: pip install -r requirements.txt
+Start command: python scripts/init_sql.py && python live_server.py
+```
+
+Environment variables:
+
+```text
+HOST=0.0.0.0
+PUBLIC_URL=https://dashboard.wpacs.com
+```
+
+Do not set `PORT` manually. Render injects `PORT`, and `live_server.py` reads it automatically.
+
+### Why The Start Command Initializes SQLite
+
+The start command runs:
+
+```bash
+python scripts/init_sql.py && python live_server.py
+```
+
+This creates `data/wpacs.db`, applies `sql/schema.sql`, loads `sql/seed.sql`, and seeds employee, attendance, productivity, manager, user, role, report, readiness, trust, and workstation-agent demo data before the server starts.
+
+Render instances have ephemeral filesystems on the free/native web service path. The current SQLite setup is appropriate for a seeded prototype/live demo. For durable production data, attach persistent storage or migrate to a managed database later.
+
+## Local Verification
+
+Run:
+
+```bash
+python scripts/init_sql.py
+HOST=127.0.0.1 PORT=4190 PUBLIC_URL=http://127.0.0.1:4190 python live_server.py
+```
+
+Windows PowerShell:
+
+```powershell
+$env:HOST = "127.0.0.1"
+$env:PORT = "4190"
+$env:PUBLIC_URL = "http://127.0.0.1:4190"
+python scripts/init_sql.py
+python live_server.py
+```
+
+Check:
+
+```text
+http://127.0.0.1:4190/
+http://127.0.0.1:4190/src/main.js
+http://127.0.0.1:4190/src/styles.css
+http://127.0.0.1:4190/api/health
+http://127.0.0.1:4190/api/live-dashboard
+http://127.0.0.1:4190/api/v1/employees
+```
+
+Demo login:
+
+```text
+admin / admin_hash_001
+```
+
+## Custom Domain On Render
+
+After the Render service is deployed:
+
+1. Open the Render web service.
+2. Go to Settings > Custom Domains.
+3. Add:
 
 ```text
 dashboard.wpacs.com
 ```
 
-pointing to the hostname provided by the web host. After DNS is active, enable HTTPS/TLS for the custom domain in the hosting platform.
+4. Render will provide a DNS target.
+5. In the DNS provider for `wpacs.com`, create:
 
-## Live SQL Dashboard
-
-Use this mode for the working dashboard with login, employees, attendance, productivity reports, and Excel/PDF downloads.
-
-### Render
-
-1. Push this folder to GitHub.
-2. In Render, create a new Blueprint or Web Service from the repo.
-3. Render can use `render.yaml`.
-4. Start command:
-
-```bash
-python scripts/init_sql.py && python live_server.py
+```text
+Type: CNAME
+Name: dashboard
+Value: <render-provided-target>
 ```
 
-5. Environment variable:
+6. Wait for DNS propagation.
+7. Confirm Render issues HTTPS for `https://dashboard.wpacs.com`.
+8. Update `PUBLIC_URL` in Render if needed:
 
-```bash
-HOST=0.0.0.0
+```text
 PUBLIC_URL=https://dashboard.wpacs.com
 ```
 
-Render will provide `PORT` automatically.
+Use Render's DNS target for the backend app. Do not point `dashboard.wpacs.com` to GitHub Pages if you want API routes and SQLite behavior.
 
-### Railway / Heroku-style hosts
+## Static Preview Only
 
-The included `Procfile` runs:
+The repository still contains static deployment configs for GitHub Pages, Netlify, and Vercel. These are not full production deployments because they cannot run:
 
-```bash
-python scripts/init_sql.py && python live_server.py
-```
+- `live_server.py`
+- `/api/v1/*`
+- `/api/live-dashboard`
+- SQLite-backed writes
+- Excel/PDF report downloads
 
-For any host that requires explicit binding:
-
-```bash
-HOST=0.0.0.0
-```
-
-## Static Website Only
-
-This mode builds the UI only. It does not include the Python API or SQLite database, so login, employee saves, attendance saves, and report downloads will not work unless a backend is hosted separately.
-
-## Build
-
-```bash
-node scripts/build.js
-```
-
-## Hosting Options
-
-### Netlify
-
-- Connect this folder or GitHub repo to Netlify.
-- Build command: `node scripts/build.js`
-- Publish directory: `dist`
-- Static UI only.
-
-### Vercel
-
-- Import the repo into Vercel.
-- Build command: `node scripts/build.js`
-- Output directory: `dist`
-- Static UI only.
-
-### GitHub Pages
-
-- Push this repo to GitHub on the `main` branch.
-- Enable GitHub Pages using GitHub Actions.
-- The included workflow deploys `dist/`.
-- Static UI only.
+Use static hosting only for a visual preview.
