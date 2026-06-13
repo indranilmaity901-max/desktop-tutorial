@@ -1,0 +1,6 @@
+*.log
+__pycache__/
+*.py[cod]
+data/*.db
+data/*.db-*
+node_modules/

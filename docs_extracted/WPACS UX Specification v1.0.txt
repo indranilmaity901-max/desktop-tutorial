@@ -1,0 +1,656 @@
+WPACS UX Specification v1.0 
+Workforce Productivity & Activity Correlation System 
+User Experience & Interface Design Specification 
+Document Purpose 
+This document defines the complete user experience architecture, screen inventory, navigation 
+structure, dashboard layouts, workflows, and interaction standards for WPACS Version 1.0. 
+This document is intended for: 
+ UI/UX Designers  
+ Frontend Developers  
+ Product Managers  
+ QA Engineers  
+ Backend Developers  
+ 
+1. UX DESIGN PRINCIPLES 
+Principle 1 – Evidence Before Opinion 
+Every score must be explainable. 
+Bad UX: 
+Productivity Score = 72 
+Good UX: 
+Productivity Score = 72 
+Reason: 
+ Productive Time: 78%  
+ Conflict Penalty: -4%  
+ Attendance Penalty: -2%  
+ 
+
+Principle 2 – Drill Down Everything 
+Every metric must allow navigation to: 
+Executive Dashboard 
+↓ 
+Manager Dashboard 
+↓ 
+Employee Dashboard 
+↓ 
+Conflict Detail 
+↓ 
+Raw Evidence 
+ 
+Principle 3 – Alert First 
+Managers should see issues immediately. 
+Critical information must appear before reports. 
+ 
+Principle 4 – Role-Based Experience 
+Different users see different interfaces. 
+Employee 
+Sees self 
+Manager 
+Sees team 
+Executive 
+
+Sees organization 
+ 
+2. PRIMARY NA VIGATION 
+Main Navigation Menu 
+Dashboard 
+ 
+Employees 
+ 
+Teams 
+ 
+Conflicts 
+ 
+Productivity 
+ 
+Compliance 
+ 
+Reports 
+ 
+Alerts 
+ 
+Rule Engine 
+ 
+Administration 
+ 
+Settings 
+ 
+3. APPLICATION LAYOUT 
+Global Layout 
++----------------------------------------------------+ 
+| Header                                              | 
++----------------------------------------------------+ 
+| Sidebar | Main Content Area                        | 
+|          |                                         | 
+|          |                                         | 
+|          |                                         | 
++----------------------------------------------------+ 
+| Footer                                              | 
++----------------------------------------------------+ 
+ 
+4. HEADER DESIGN 
+
+Components 
+Logo 
+Search 
+Notification Bell 
+User Profile 
+Organization Selector 
+Date Filter 
+ 
+Header Layout 
++----------------------------------------------------+ 
+| WPACS | Search | Alerts | Date | Profile          | 
++----------------------------------------------------+ 
+ 
+5. SIDEBAR NA VIGATION 
+Dashboard 
+ 
+People 
+ ├─ Employees 
+ ├─ Teams 
+ 
+Operations 
+ ├─ Productivity 
+ ├─ Compliance 
+ ├─ Conflicts 
+ 
+Analytics 
+ ├─ Trends 
+ ├─ Reports 
+ 
+Administration 
+ ├─ Rules 
+ ├─ Users 
+ ├─ Integrations 
+ ├─ Settings 
+ 
+6. DASHBOARD LANDING PAGE 
+
+Screen ID 
+UX-001 
+Screen Name 
+Executive Dashboard 
+ 
+Purpose 
+Provide organization-wide visibility. 
+ 
+Widgets 
+Productivity Score 
++-------------------+ 
+| Productivity 82%  | 
++-------------------+ 
+ 
+Compliance Score 
++-------------------+ 
+| Compliance 91%    | 
++-------------------+ 
+ 
+Confidence Score 
++-------------------+ 
+| Confidence 96%    | 
++-------------------+ 
+ 
+Active Users 
++-------------------+ 
+| Active Users 842  | 
++-------------------+ 
+ 
+Conflict Count 
+
++-------------------+ 
+| Conflicts 45      | 
++-------------------+ 
+ 
+Alerts Summary 
++-------------------+ 
+| Critical 12       | 
+| High 28           | 
++-------------------+ 
+ 
+7. PRODUCTIVITY DASHBOARD 
+Screen ID 
+UX-002 
+Purpose 
+Display productivity metrics. 
+ 
+Filters 
+Date 
+Department 
+Manager 
+Team 
+Employee 
+Location 
+ 
+Widgets 
+Productivity Trend 
+Utilization Trend 
+
+Top Performers 
+Lowest Performers 
+Department Comparison 
+Historical Trends 
+ 
+8. EMPLOYEE DIRECTORY 
+Screen ID 
+UX-003 
+Purpose 
+Search workforce. 
+ 
+Columns 
+Employee ID 
+Name 
+Department 
+Manager 
+Current State 
+Productivity Score 
+Compliance Score 
+Confidence Score 
+Last Activity 
+ 
+Actions 
+
+View Profile 
+View History 
+View Conflicts 
+ 
+9. EMPLOYEE PROFILE PAGE 
+Screen ID 
+UX-004 
+Purpose 
+Detailed employee analysis. 
+ 
+Sections 
+Overview 
+Productivity 
+Compliance 
+Conflicts 
+Timeline 
+Alerts 
+ 
+Layout 
+Employee Summary 
+ 
+Current State 
+ 
+Scores 
+ 
+Recent Alerts 
+ 
+Activity Timeline 
+
+ 
+Conflict History 
+ 
+10. ACTIVITY TIMELINE 
+Screen ID 
+UX-005 
+Purpose 
+Show chronological activity. 
+ 
+Timeline Example 
+08:00 Login 
+ 
+08:05 Ready 
+ 
+08:12 On Call 
+ 
+09:15 Break 
+ 
+09:30 Ready 
+ 
+10:22 Locked 
+ 
+10:40 Unlock 
+ 
+10:45 Ready 
+ 
+Filters 
+State 
+Source 
+Severity 
+Date Range 
+ 
+
+11. CONFLICT MANAGEMENT SCREEN 
+Screen ID 
+UX-006 
+Purpose 
+Review detected conflicts. 
+ 
+Columns 
+Conflict ID 
+Employee 
+Type 
+Severity 
+Duration 
+Confidence 
+Status 
+Created Date 
+ 
+Filters 
+Severity 
+Manager 
+Department 
+Date 
+Status 
+ 
+
+12. CONFLICT DETAIL PAGE 
+Screen ID 
+UX-007 
+Purpose 
+Explain conflict. 
+ 
+Sections 
+Conflict Summary 
+Evidence Sources 
+Rule Applied 
+Timeline 
+Recommended Actions 
+Audit Trail 
+ 
+Example 
+Conflict 
+ 
+READY + LOCKED 
+ 
+Duration 
+ 
+15 Minutes 
+ 
+Confidence 
+ 
+98% 
+ 
+Rule 
+ 
+SV-001 
+ 
+Recommendation 
+ 
+Manager Review 
+
+ 
+13. ALERT CENTER 
+Screen ID 
+UX-008 
+Purpose 
+Central alert management. 
+ 
+Alert Types 
+Productivity 
+Compliance 
+Risk 
+System 
+Integration 
+ 
+Filters 
+Priority 
+Owner 
+Department 
+Status 
+ 
+14. REPORT CENTER 
+Screen ID 
+
+UX-009 
+Purpose 
+Generate reports. 
+ 
+Reports 
+Daily Productivity 
+Weekly Productivity 
+Monthly Productivity 
+Compliance 
+Conflict Analysis 
+Manager Effectiveness 
+Attendance 
+ 
+Actions 
+Run 
+Schedule 
+Export 
+Share 
+ 
+15. RULE ENGINE UI 
+Screen ID 
+UX-010 
+Purpose 
+
+Manage rules. 
+ 
+List View 
+Rule ID 
+ 
+Rule Name 
+ 
+Status 
+ 
+Version 
+ 
+Updated Date 
+ 
+Actions 
+Create 
+Edit 
+Disable 
+Clone 
+View History 
+ 
+16. RULE BUILDER SCREEN 
+Screen ID 
+UX-011 
+Purpose 
+Configure logic. 
+ 
+Visual Builder 
+IF 
+ 
+
+Dialer State = READY 
+ 
+AND 
+ 
+Workstation State = LOCKED 
+ 
+THEN 
+ 
+Create Conflict 
+ 
+Components 
+Conditions 
+Actions 
+Severity 
+Priority 
+Confidence Impact 
+ 
+17. USER MANAGEMENT 
+Screen ID 
+UX-012 
+Purpose 
+Manage users. 
+ 
+Actions 
+Create User 
+Edit User 
+Deactivate User 
+Assign Role 
+
+Reset Password 
+Enable MFA 
+ 
+18. INTEGRATION CENTER 
+Screen ID 
+UX-013 
+Purpose 
+Manage integrations. 
+ 
+Integrations 
+TCN 
+Workstation Agent 
+SSO 
+Email 
+Future APIs 
+ 
+Status Indicators 
+Connected 
+Disconnected 
+Error 
+Maintenance 
+ 
+
+19. SYSTEM HEALTH DASHBOARD 
+Screen ID 
+UX-014 
+Purpose 
+Platform monitoring. 
+ 
+Widgets 
+API Health 
+Queue Health 
+Database Health 
+Event Processing 
+Storage 
+Agent Connectivity 
+ 
+20. AUDIT CENTER 
+Screen ID 
+UX-015 
+Purpose 
+Compliance investigations. 
+ 
+Search By 
+User 
+
+Rule 
+Date 
+System 
+Action 
+ 
+Results 
+Timestamp 
+Action 
+Actor 
+Source 
+Old Value 
+New Value 
+ 
+21. MOBILE EXPERIENCE 
+Supported Features 
+Dashboard 
+Alerts 
+Employee Lookup 
+Conflict Review 
+Approvals 
+Reports 
+ 
+Not Supported V1 
+
+Rule Builder 
+Advanced Reporting 
+Administration 
+ 
+22. DESIGN SYSTEM 
+Typography 
+Primary Font 
+Inter 
+ 
+Spacing 
+4px Grid System 
+ 
+Component Library 
+Buttons 
+Tables 
+Cards 
+Charts 
+Modals 
+Dropdowns 
+Tabs 
+Badges 
+Notifications 
+ 
+
+23. COLOR SYSTEM 
+Success 
+Green 
+Warning 
+Amber 
+Error 
+Red 
+Information 
+Blue 
+Neutral 
+Gray 
+ 
+Severity Mapping 
+Critical 
+Red 
+High 
+Orange 
+Medium 
+Yellow 
+Low 
+Blue 
+ 
+
+24. ACCESSIBILITY 
+Requirements 
+WCAG 2.1 AA 
+Keyboard Navigation 
+Screen Reader Support 
+High Contrast Mode 
+Responsive Layout 
+ 
+25. USER WORKFLOWS 
+Workflow 1 
+Manager Investigates Productivity Issue 
+Dashboard 
+ 
+↓ 
+ 
+Alert 
+ 
+↓ 
+ 
+Conflict 
+ 
+↓ 
+ 
+Employee Profile 
+ 
+↓ 
+ 
+Evidence 
+ 
+↓ 
+ 
+Resolution 
+ 
+Workflow 2 
+Administrator Creates Rule 
+
+Rules 
+ 
+↓ 
+ 
+Create Rule 
+ 
+↓ 
+ 
+Test Rule 
+ 
+↓ 
+ 
+Approve 
+ 
+↓ 
+ 
+Activate 
+ 
+Workflow 3 
+Executive Reviews Organization Performance 
+Dashboard 
+ 
+↓ 
+ 
+Department Metrics 
+ 
+↓ 
+ 
+Manager Metrics 
+ 
+↓ 
+ 
+Trend Analysis 
+ 
+↓ 
+ 
+ROI Indicators 
+ 
+SCREEN INVENTORY SUMMARY 
+UX-001 Executive Dashboard 
+UX-002 Productivity Dashboard 
+UX-003 Employee Directory 
+UX-004 Employee Profile 
+UX-005 Activity Timeline 
+UX-006 Conflict Management 
+UX-007 Conflict Detail 
+UX-008 Alert Center 
+UX-009 Report Center 
+
+UX-010 Rule Engine 
+UX-011 Rule Builder 
+UX-012 User Management 
+UX-013 Integration Center 
+UX-014 System Health Dashboard 
+UX-015 Audit Center 
+DEFINITION OF DONE 
+The UX Specification is complete when: 
+✓ Every screen is defined 
+✓ Every user workflow is defined 
+✓ Navigation is defined 
+✓ Dashboard widgets are defined 
+✓ Role-based access is defined 
+✓ Mobile strategy is defined 
+✓ Accessibility requirements are defined 
+✓ Design system standards are defined 

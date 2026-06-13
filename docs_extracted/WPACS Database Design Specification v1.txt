@@ -1,0 +1,676 @@
+WPACS Database Design Specification v1.0 
+Workforce Productivity & Activity Correlation System 
+Enterprise Data Architecture Specification 
+Purpose 
+This document defines the database architecture, entity relationships, table structures, indexing 
+strategy, partitioning model, audit framework, and data retention requirements for WPACS. 
+Target Database 
+PostgreSQL 16+ 
+ 
+1. DATABASE ARCHITECTURE 
+PRINCIPLES 
+Principle 1 
+Event data is immutable. 
+Events are never modified. 
+Events may only be: 
+ Inserted  
+ Archived  
+ 
+Principle 2 
+Derived data is separated from source data. 
+Source Events 
+↓ 
+Validation 
+
+↓ 
+Metrics 
+↓ 
+Reports 
+ 
+Principle 3 
+Every calculation is traceable. 
+Every score must trace back to: 
+ Rule  
+ Event  
+ Evidence  
+ 
+2. DATABASE DOMAINS 
+WPACS database consists of: 
+Identity Domain 
+ 
+Organization Domain 
+ 
+Workforce Domain 
+ 
+Event Domain 
+ 
+Validation Domain 
+ 
+Productivity Domain 
+ 
+Alert Domain 
+ 
+Rule Engine Domain 
+ 
+Audit Domain 
+ 
+Reporting Domain 
+ 
+Integration Domain 
+ 
+
+3. HIGH LEVEL ERD 
+Organization 
+    │ 
+    ├── Users 
+    │ 
+    ├── Teams 
+    │ 
+    ├── Employees 
+    │ 
+    ├── Rules 
+    │ 
+    ├── Integrations 
+    │ 
+    ├── Events 
+    │ 
+    ├── Conflicts 
+    │ 
+    ├── Alerts 
+    │ 
+    └── Reports 
+ 
+4. ORGANIZATIONS TABLE 
+organizations 
+CREATE TABLE organizations ( 
+    organization_id UUID PRIMARY KEY, 
+ 
+    name VARCHAR(255) NOT NULL, 
+ 
+    code VARCHAR(50) UNIQUE, 
+ 
+    status VARCHAR(50), 
+ 
+    timezone VARCHAR(100), 
+ 
+    created_at TIMESTAMP, 
+ 
+    updated_at TIMESTAMP 
+); 
+ 
+5. DEPARTMENTS TABLE 
+departments 
+
+CREATE TABLE departments ( 
+    department_id UUID PRIMARY KEY, 
+ 
+    organization_id UUID NOT NULL, 
+ 
+    name VARCHAR(255), 
+ 
+    description TEXT, 
+ 
+    created_at TIMESTAMP, 
+ 
+    updated_at TIMESTAMP 
+); 
+ 
+Foreign Key 
+organization_id 
+REFERENCES organizations 
+ 
+6. TEAMS TABLE 
+teams 
+CREATE TABLE teams ( 
+    team_id UUID PRIMARY KEY, 
+ 
+    organization_id UUID NOT NULL, 
+ 
+    department_id UUID, 
+ 
+    manager_id UUID, 
+ 
+    team_name VARCHAR(255), 
+ 
+    created_at TIMESTAMP 
+); 
+ 
+7. USERS TABLE 
+users 
+CREATE TABLE users ( 
+    user_id UUID PRIMARY KEY, 
+ 
+    organization_id UUID NOT NULL, 
+ 
+
+    email VARCHAR(255) UNIQUE, 
+ 
+    first_name VARCHAR(100), 
+ 
+    last_name VARCHAR(100), 
+ 
+    role_id UUID, 
+ 
+    status VARCHAR(50), 
+ 
+    last_login TIMESTAMP, 
+ 
+    created_at TIMESTAMP 
+); 
+ 
+8. ROLES TABLE 
+roles 
+CREATE TABLE roles ( 
+    role_id UUID PRIMARY KEY, 
+ 
+    role_name VARCHAR(100), 
+ 
+    description TEXT 
+); 
+ 
+Roles 
+EMPLOYEE 
+ 
+TEAM_LEAD 
+ 
+MANAGER 
+ 
+ADMIN 
+ 
+EXECUTIVE 
+ 
+9. EMPLOYEES TABLE 
+employees 
+CREATE TABLE employees ( 
+    employee_id UUID PRIMARY KEY, 
+ 
+
+    organization_id UUID, 
+ 
+    user_id UUID, 
+ 
+    employee_number VARCHAR(100), 
+ 
+    team_id UUID, 
+ 
+    manager_id UUID, 
+ 
+    hire_date DATE, 
+ 
+    employment_status VARCHAR(50), 
+ 
+    created_at TIMESTAMP 
+); 
+ 
+10. WORKSTATIONS TABLE 
+workstations 
+CREATE TABLE workstations ( 
+    workstation_id UUID PRIMARY KEY, 
+ 
+    employee_id UUID, 
+ 
+    hostname VARCHAR(255), 
+ 
+    os_version VARCHAR(255), 
+ 
+    agent_version VARCHAR(50), 
+ 
+    created_at TIMESTAMP 
+); 
+ 
+11. INTEGRATIONS TABLE 
+integrations 
+CREATE TABLE integrations ( 
+    integration_id UUID PRIMARY KEY, 
+ 
+    organization_id UUID, 
+ 
+    integration_name VARCHAR(100), 
+ 
+    integration_type VARCHAR(100), 
+ 
+
+    status VARCHAR(50), 
+ 
+    configuration JSONB, 
+ 
+    created_at TIMESTAMP 
+); 
+ 
+12. RAW EVENTS TABLE 
+raw_events 
+This is the largest table in WPACS. 
+CREATE TABLE raw_events ( 
+ 
+    event_id UUID PRIMARY KEY, 
+ 
+    organization_id UUID, 
+ 
+    employee_id UUID, 
+ 
+    source_type VARCHAR(50), 
+ 
+    source_system VARCHAR(100), 
+ 
+    event_type VARCHAR(100), 
+ 
+    event_timestamp TIMESTAMP, 
+ 
+    payload JSONB, 
+ 
+    created_at TIMESTAMP 
+); 
+ 
+Sources 
+TCN 
+ 
+WORKSTATION 
+ 
+ATTENDANCE 
+ 
+SCHEDULE 
+ 
+SYSTEM 
+ 
+13. EVENT PARTITIONING 
+
+Required 
+Monthly partitioning. 
+Example 
+raw_events_2026_01 
+ 
+raw_events_2026_02 
+ 
+raw_events_2026_03 
+ 
+14. WORKSTATION EVENTS 
+workstation_events 
+CREATE TABLE workstation_events ( 
+ 
+    workstation_event_id UUID PRIMARY KEY, 
+ 
+    employee_id UUID, 
+ 
+    workstation_id UUID, 
+ 
+    event_type VARCHAR(100), 
+ 
+    event_timestamp TIMESTAMP, 
+ 
+    metadata JSONB 
+); 
+ 
+Events 
+LOGIN 
+ 
+LOGOUT 
+ 
+LOCK 
+ 
+UNLOCK 
+ 
+IDLE 
+ 
+ACTIVE 
+ 
+15. TCN EVENTS 
+
+tcn_events 
+CREATE TABLE tcn_events ( 
+ 
+    tcn_event_id UUID PRIMARY KEY, 
+ 
+    employee_id UUID, 
+ 
+    agent_state VARCHAR(100), 
+ 
+    queue_name VARCHAR(255), 
+ 
+    event_timestamp TIMESTAMP, 
+ 
+    metadata JSONB 
+); 
+ 
+States 
+READY 
+ 
+ON_CALL 
+ 
+WRAP 
+ 
+BREAK 
+ 
+LUNCH 
+ 
+OFFLINE 
+ 
+16. STATE SNAPSHOTS 
+state_snapshots 
+Purpose 
+Store latest known state. 
+CREATE TABLE state_snapshots ( 
+ 
+    snapshot_id UUID PRIMARY KEY, 
+ 
+    employee_id UUID, 
+ 
+    workstation_state VARCHAR(50), 
+ 
+    dialer_state VARCHAR(50), 
+ 
+
+    attendance_state VARCHAR(50), 
+ 
+    schedule_state VARCHAR(50), 
+ 
+    confidence_score NUMERIC(5,2), 
+ 
+    snapshot_timestamp TIMESTAMP 
+); 
+ 
+17. V ALIDATION RESULTS 
+validation_results 
+CREATE TABLE validation_results ( 
+ 
+    validation_id UUID PRIMARY KEY, 
+ 
+    employee_id UUID, 
+ 
+    rule_id UUID, 
+ 
+    validation_result VARCHAR(50), 
+ 
+    severity VARCHAR(50), 
+ 
+    confidence_score NUMERIC(5,2), 
+ 
+    created_at TIMESTAMP 
+); 
+ 
+Results 
+VALID 
+ 
+WARNING 
+ 
+CONFLICT 
+ 
+CRITICAL 
+ 
+18. CONFLICTS TABLE 
+conflicts 
+CREATE TABLE conflicts ( 
+ 
+
+    conflict_id UUID PRIMARY KEY, 
+ 
+    employee_id UUID, 
+ 
+    conflict_type VARCHAR(100), 
+ 
+    severity VARCHAR(50), 
+ 
+    duration_seconds INTEGER, 
+ 
+    confidence_score NUMERIC(5,2), 
+ 
+    status VARCHAR(50), 
+ 
+    created_at TIMESTAMP 
+); 
+ 
+19. PRODUCTIVITY SCORES 
+productivity_scores 
+CREATE TABLE productivity_scores ( 
+ 
+    score_id UUID PRIMARY KEY, 
+ 
+    employee_id UUID, 
+ 
+    score_date DATE, 
+ 
+    productivity_score NUMERIC(5,2), 
+ 
+    utilization_score NUMERIC(5,2), 
+ 
+    compliance_score NUMERIC(5,2), 
+ 
+    confidence_score NUMERIC(5,2), 
+ 
+    rule_version VARCHAR(50), 
+ 
+    created_at TIMESTAMP 
+); 
+ 
+20. ALERTS TABLE 
+alerts 
+CREATE TABLE alerts ( 
+ 
+
+    alert_id UUID PRIMARY KEY, 
+ 
+    organization_id UUID, 
+ 
+    employee_id UUID, 
+ 
+    alert_type VARCHAR(100), 
+ 
+    severity VARCHAR(50), 
+ 
+    status VARCHAR(50), 
+ 
+    created_at TIMESTAMP 
+); 
+ 
+21. RULES TABLE 
+rules 
+CREATE TABLE rules ( 
+ 
+    rule_id UUID PRIMARY KEY, 
+ 
+    organization_id UUID, 
+ 
+    rule_name VARCHAR(255), 
+ 
+    category VARCHAR(100), 
+ 
+    version VARCHAR(50), 
+ 
+    status VARCHAR(50), 
+ 
+    configuration JSONB, 
+ 
+    created_at TIMESTAMP 
+); 
+ 
+22. RULE EXECUTION LOG 
+rule_execution_log 
+CREATE TABLE rule_execution_log ( 
+ 
+    execution_id UUID PRIMARY KEY, 
+ 
+    rule_id UUID, 
+ 
+
+    employee_id UUID, 
+ 
+    result VARCHAR(100), 
+ 
+    execution_time_ms INTEGER, 
+ 
+    created_at TIMESTAMP 
+); 
+ 
+23. REPORT DEFINITIONS 
+reports 
+CREATE TABLE reports ( 
+ 
+    report_id UUID PRIMARY KEY, 
+ 
+    organization_id UUID, 
+ 
+    report_name VARCHAR(255), 
+ 
+    report_type VARCHAR(100), 
+ 
+    configuration JSONB, 
+ 
+    created_at TIMESTAMP 
+); 
+ 
+24. AUDIT LOGS 
+audit_logs 
+CREATE TABLE audit_logs ( 
+ 
+    audit_id UUID PRIMARY KEY, 
+ 
+    organization_id UUID, 
+ 
+    user_id UUID, 
+ 
+    action VARCHAR(255), 
+ 
+    entity_name VARCHAR(255), 
+ 
+    entity_id UUID, 
+ 
+    old_value JSONB, 
+ 
+
+    new_value JSONB, 
+ 
+    created_at TIMESTAMP 
+); 
+ 
+25. API KEYS 
+api_keys 
+CREATE TABLE api_keys ( 
+ 
+    api_key_id UUID PRIMARY KEY, 
+ 
+    organization_id UUID, 
+ 
+    key_name VARCHAR(255), 
+ 
+    key_hash TEXT, 
+ 
+    status VARCHAR(50), 
+ 
+    expires_at TIMESTAMP 
+); 
+ 
+26. INDEXING STRATEGY 
+Mandatory Indexes 
+CREATE INDEX idx_events_employee 
+ON raw_events(employee_id); 
+ 
+CREATE INDEX idx_events_timestamp 
+ON raw_events(event_timestamp); 
+ 
+CREATE INDEX idx_events_org 
+ON raw_events(organization_id); 
+ 
+CREATE INDEX idx_conflict_employee 
+ON conflicts(employee_id); 
+ 
+CREATE INDEX idx_productivity_employee 
+ON productivity_scores(employee_id); 
+ 
+27. JSONB INDEXING 
+
+CREATE INDEX idx_events_payload 
+ON raw_events 
+USING GIN(payload); 
+ 
+28. DATA RETENTION 
+Table Retention 
+Raw Events 24 Months 
+Validation Results 24 Months 
+Productivity Scores 5 Years 
+Reports 5 Years 
+Audit Logs Permanent 
+ 
+29. ARCHIVE STRATEGY 
+Monthly Archive Process 
+Active Storage 
+ 
+↓ 
+ 
+Warm Storage 
+ 
+↓ 
+ 
+Cold Storage 
+ 
+↓ 
+ 
+Deletion Policy 
+ 
+30. MULTI-TENANT STRATEGY 
+Every table shall include: 
+organization_id 
+Tenant isolation enforced through: 
+ Application Layer  
+ Database Policies  
+ API Authorization  
+
+ 
+31. FUTURE TABLES (PHASE 2) 
+machine_learning_predictions 
+ 
+forecasting_results 
+ 
+coaching_recommendations 
+ 
+employee_acknowledgements 
+ 
+case_management 
+ 
+investigations 
+ 
+32. DATABASE PERFORMANCE 
+TARGETS 
+Metric Target 
+Single Employee Lookup < 100ms 
+Dashboard Query < 500ms 
+Conflict Query < 300ms 
+Report Generation < 30 sec 
+Event Ingestion 5,000/sec 
+ 
+33. DATABASE SECURITY 
+Requirements 
+ Encryption at Rest  
+ Encryption in Transit  
+ Role-Based Access  
+ Row-Level Security  
+ Audit Logging  
+ Backup Encryption  
+ 
+34. BACKUP STRATEGY 
+
+Hourly Incremental 
+ 
+Daily Full Backup 
+ 
+30 Day Backup Retention 
+ 
+Quarterly Recovery Testing 
+ 
+35. DEFINITION OF DONE 
+Database Design Complete When: 
+✓ Core entities defined 
+✓ Relationships defined 
+✓ Partition strategy defined 
+✓ Multi-tenancy defined 
+✓ Indexing defined 
+✓ Retention defined 
+✓ Security controls defined 
+✓ Backup strategy defined 
+✓ Performance targets defined 
+ 
+CTO Review of This Specification 
+This is enough for a backend architect to start: 
+ Creating ER diagrams  
+ Building migration scripts  
+ Creating PostgreSQL schemas  
+ Designing repositories and services  
+ Defining event storage architecture 

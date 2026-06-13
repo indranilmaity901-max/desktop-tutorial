@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: wpacs-dashboard
+    runtime: python
+    buildCommand: ""
+    startCommand: "python scripts/init_sql.py && python live_server.py"
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: PUBLIC_URL
+        value: https://dashboard.wpacs.com

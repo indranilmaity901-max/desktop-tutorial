@@ -1,0 +1,463 @@
+WPACS API Contracts Specification v1.0 
+Workforce Productivity & Activity Correlation System 
+REST API Contract & Service Interface Specification 
+Document Purpose 
+This document defines the official API contracts for WPACS. 
+These APIs serve as the integration layer between: 
+ Frontend  
+ Backend  
+ Workstation Agent  
+ TCN Integration Service  
+ Rule Engine  
+ Reporting Service  
+ External Integrations  
+ 
+1. API STANDARDS 
+Protocol 
+HTTPS Only 
+ 
+API Style 
+REST API 
+ 
+Data Format 
+{ 
+  "success": true, 
+  "data": {}, 
+  "message": "", 
+  "errors": [] 
+} 
+ 
+
+API Versioning 
+/api/v1 
+Examples: 
+/api/v1/employees 
+/api/v1/conflicts 
+/api/v1/reports 
+ 
+2. AUTHENTICATION API 
+POST 
+/api/v1/auth/login 
+Request 
+{ 
+  "email": "admin@company.com", 
+  "password": "********" 
+} 
+Response 
+{ 
+  "success": true, 
+  "data": { 
+    "access_token": "jwt_token", 
+    "refresh_token": "refresh_token", 
+    "expires_in": 3600 
+  } 
+} 
+ 
+POST 
+/api/v1/auth/refresh 
+Request 
+{ 
+  "refresh_token": "token" 
+} 
+ 
+
+POST 
+/api/v1/auth/logout 
+ 
+3. USER MANAGEMENT API 
+GET USERS 
+GET /api/v1/users 
+Query Parameters 
+page 
+page_size 
+role 
+status 
+search 
+Response 
+{ 
+  "success": true, 
+  "data": [ 
+    { 
+      "user_id": "uuid", 
+      "email": "john@company.com", 
+      "role": "MANAGER", 
+      "status": "ACTIVE" 
+    } 
+  ] 
+} 
+ 
+CREATE USER 
+POST /api/v1/users 
+Request 
+{ 
+  "first_name": "John", 
+  "last_name": "Smith", 
+  "email": "john@company.com", 
+  "role": "MANAGER" 
+} 
+ 
+
+UPDATE USER 
+PUT /api/v1/users/{user_id} 
+ 
+DELETE USER 
+DELETE /api/v1/users/{user_id} 
+ 
+4. EMPLOYEE API 
+GET EMPLOYEES 
+GET /api/v1/employees 
+Filters 
+department 
+team 
+manager 
+status 
+ 
+Response 
+{ 
+  "employee_id": "uuid", 
+  "employee_number": "EMP001", 
+  "name": "John Smith", 
+  "team": "Collections", 
+  "manager": "Mike Brown" 
+} 
+ 
+EMPLOYEE DETAILS 
+GET /api/v1/employees/{employee_id} 
+Response 
+{ 
+  "employee_id": "uuid", 
+  "name": "John Smith", 
+  "productivity_score": 84, 
+  "compliance_score": 91, 
+
+  "confidence_score": 96 
+} 
+ 
+5. WORKSTATION AGENT API 
+EVENT INGESTION 
+POST /api/v1/workstation/events 
+Request 
+{ 
+  "employee_id": "uuid", 
+  "workstation_id": "uuid", 
+  "event_type": "LOCK", 
+  "event_timestamp": "2026-06-01T10:00:00Z", 
+  "metadata": { 
+    "hostname": "PC001" 
+  } 
+} 
+Response 
+{ 
+  "success": true, 
+  "event_id": "uuid" 
+} 
+ 
+6. TCN INTEGRATION API 
+POST TCN EVENT 
+POST /api/v1/integrations/tcn/events 
+Request 
+{ 
+  "employee_id": "uuid", 
+  "agent_state": "READY", 
+  "queue_name": "COLLECTIONS", 
+  "event_timestamp": "2026-06-01T10:01:00Z" 
+} 
+ 
+
+7. STATE V ALIDATION API 
+VALIDATE EMPLOYEE 
+POST /api/v1/validation/run 
+Request 
+{ 
+  "employee_id": "uuid" 
+} 
+Response 
+{ 
+  "validation_result": "CONFLICT", 
+  "severity": "HIGH", 
+  "confidence_score": 97 
+} 
+ 
+8. CONFLICT MANAGEMENT API 
+GET CONFLICTS 
+GET /api/v1/conflicts 
+Filters 
+severity 
+employee 
+manager 
+status 
+date_from 
+date_to 
+ 
+Response 
+{ 
+  "items": [ 
+    { 
+      "conflict_id": "uuid", 
+      "employee_id": "uuid", 
+      "type": "READY_LOCKED", 
+      "severity": "HIGH", 
+      "duration_seconds": 900 
+
+    } 
+  ] 
+} 
+ 
+CONFLICT DETAILS 
+GET /api/v1/conflicts/{conflict_id} 
+Response 
+{ 
+  "conflict_id": "uuid", 
+  "rule_id": "SV001", 
+  "confidence_score": 98, 
+  "timeline": [] 
+} 
+ 
+9. PRODUCTIVITY API 
+GET PRODUCTIVITY 
+GET /api/v1/productivity 
+Filters 
+employee 
+team 
+manager 
+date_from 
+date_to 
+ 
+Response 
+{ 
+  "employee_id": "uuid", 
+  "productivity_score": 82, 
+  "utilization_score": 88, 
+  "compliance_score": 94, 
+  "confidence_score": 97 
+} 
+ 
+10. DASHBOARD API 
+
+EXECUTIVE DASHBOARD 
+GET /api/v1/dashboard/executive 
+Response 
+{ 
+  "productivity_score": 83, 
+  "compliance_score": 92, 
+  "active_users": 1240, 
+  "conflicts": 53 
+} 
+ 
+MANAGER DASHBOARD 
+GET /api/v1/dashboard/manager 
+ 
+EMPLOYEE DASHBOARD 
+GET /api/v1/dashboard/employee 
+ 
+11. ALERT API 
+GET ALERTS 
+GET /api/v1/alerts 
+Response 
+{ 
+  "items": [ 
+    { 
+      "alert_id": "uuid", 
+      "type": "PRODUCTIVITY_DROP", 
+      "severity": "HIGH" 
+    } 
+  ] 
+} 
+ 
+ACKNOWLEDGE ALERT 
+POST /api/v1/alerts/{alert_id}/acknowledge 
+
+ 
+12. RULE ENGINE API 
+GET RULES 
+GET /api/v1/rules 
+ 
+CREATE RULE 
+POST /api/v1/rules 
+Request 
+{ 
+  "rule_name": "READY_LOCKED", 
+  "category": "VALIDATION", 
+  "severity": "HIGH" 
+} 
+ 
+UPDATE RULE 
+PUT /api/v1/rules/{rule_id} 
+ 
+TEST RULE 
+POST /api/v1/rules/{rule_id}/test 
+Request 
+{ 
+  "dialer_state": "READY", 
+  "workstation_state": "LOCKED" 
+} 
+ 
+13. REPORTING API 
+GENERATE REPORT 
+POST /api/v1/reports/generate 
+
+Request 
+{ 
+  "report_type": "PRODUCTIVITY", 
+  "date_from": "2026-06-01", 
+  "date_to": "2026-06-30" 
+} 
+ 
+Response 
+{ 
+  "report_id": "uuid", 
+  "status": "QUEUED" 
+} 
+ 
+REPORT STATUS 
+GET /api/v1/reports/{report_id} 
+ 
+DOWNLOAD REPORT 
+GET /api/v1/reports/{report_id}/download 
+ 
+14. AUDIT API 
+SEARCH AUDIT LOGS 
+GET /api/v1/audit 
+Filters 
+user 
+entity 
+date_from 
+date_to 
+ 
+Response 
+{ 
+  "audit_id": "uuid", 
+  "action": "RULE_UPDATED", 
+
+  "timestamp": "2026-06-01T10:00:00Z" 
+} 
+ 
+15. INTEGRATION API 
+GET INTEGRATIONS 
+GET /api/v1/integrations 
+ 
+CREATE INTEGRATION 
+POST /api/v1/integrations 
+ 
+TEST CONNECTION 
+POST /api/v1/integrations/{integration_id}/test 
+ 
+16. SYSTEM HEALTH API 
+HEALTH CHECK 
+GET /api/v1/system/health 
+Response 
+{ 
+  "database": "HEALTHY", 
+  "queue": "HEALTHY", 
+  "api": "HEALTHY" 
+} 
+ 
+17. API ERROR CONTRACT 
+Standard Error Response 
+{ 
+  "success": false, 
+  "message": "Validation Failed", 
+
+  "errors": [ 
+    { 
+      "field": "employee_id", 
+      "error": "Required" 
+    } 
+  ] 
+} 
+ 
+18. HTTP STATUS CODES 
+200 OK 
+ 
+201 Created 
+ 
+400 Bad Request 
+ 
+401 Unauthorized 
+ 
+403 Forbidden 
+ 
+404 Not Found 
+ 
+409 Conflict 
+ 
+422 Validation Error 
+ 
+429 Rate Limited 
+ 
+500 Internal Error 
+ 
+19. RATE LIMITING 
+Authentication 
+10 requests/minute 
+ 
+Standard APIs 
+100 requests/minute 
+ 
+Integration APIs 
+1000 requests/minute 
+ 
+
+20. EVENT CONTRACT STANDARD 
+Every event must contain: 
+{ 
+  "event_id": "uuid", 
+  "organization_id": "uuid", 
+  "employee_id": "uuid", 
+  "event_type": "LOCK", 
+  "event_timestamp": "ISO8601", 
+  "source_system": "WORKSTATION", 
+  "metadata": {} 
+} 
+ 
+21. SECURITY REQUIREMENTS 
+Authentication 
+JWT 
+Authorization 
+RBAC 
+Encryption 
+TLS 1.3 
+Secrets 
+Vault Managed 
+ 
+22. OPENAPI REQUIREMENT 
+All APIs shall be documented using: 
+OpenAPI Specification 3.1 
+Generated Deliverables: 
+ Swagger UI  
+ OpenAPI JSON  
+ OpenAPI YAML  
+ SDK Generation  
+
+ 
+23. API PERFORMANCE TARGETS 
+API Target 
+Employee Lookup <100ms 
+Dashboard <500ms 
+Conflict Lookup <300ms 
+Rule Execution <100ms 
+Report Queue <1 sec 
+ 
+24. API VERSIONING STRATEGY 
+/api/v1 
+ 
+/api/v2 
+ 
+/api/v3 
+Backward compatibility maintained within major version. 
+ 
+25. DEFINITION OF DONE 
+API Specification Complete When: 
+✓ Authentication APIs defined 
+✓ User APIs defined 
+✓ Employee APIs defined 
+✓ Event ingestion APIs defined 
+✓ Validation APIs defined 
+✓ Productivity APIs defined 
+✓ Rule APIs defined 
+
+✓ Reporting APIs defined 
+✓ Audit APIs defined 
+✓ Error contracts defined 
+✓ Security requirements defined 
+✓ Performance targets defined 

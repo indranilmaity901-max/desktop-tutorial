@@ -1,0 +1,696 @@
+WPACS Backend Engineering Specification 
+v1.0 
+Workforce Productivity & Activity Correlation System 
+Enterprise Backend Architecture & Engineering Standard 
+Document Purpose 
+This document defines how WPACS is physically built on the backend. 
+Audience: 
+ Backend Developers  
+ Solution Architects  
+ DevOps Engineers  
+ Technical Leads  
+ QA Automation Engineers  
+ 
+1. BACKEND ARCHITECTURE 
+OVERVIEW 
+WPACS shall use a modular service architecture. 
+┌──────────────────────┐ 
+│     Frontend UI      │ 
+└──────────┬───────────┘ 
+           │ REST API 
+           ▼ 
+┌──────────────────────┐ 
+│      API Gateway     │ 
+└──────────┬───────────┘ 
+           │ 
+ ┌─────────┼─────────┐ 
+ ▼         ▼         ▼ 
+ 
+Auth     Core      Reporting 
+Service  Service   Service 
+ 
+ ▼         ▼         ▼ 
+ 
+ Rule    Event     Alert 
+Engine   Engine    Engine 
+ 
+
+ ▼         ▼         ▼ 
+ 
+ PostgreSQL  Redis  Object Storage 
+ 
+2. TECHNOLOGY STACK 
+Backend 
+Language: C# 
+ 
+Framework: ASP.NET Core 9 
+ 
+ORM: Entity Framework Core 
+ 
+Database: PostgreSQL 
+ 
+Caching: Redis 
+ 
+Messaging: RabbitMQ 
+ 
+Storage: S3 Compatible Storage 
+ 
+Authentication: JWT 
+ 
+Authorization: RBAC 
+ 
+Containerization: Docker 
+ 
+Orchestration: Kubernetes 
+ 
+3. PROJECT STRUCTURE 
+src/ 
+ 
+├── WPACS.API 
+ 
+├── WPACS.Application 
+ 
+├── WPACS.Domain 
+ 
+├── WPACS.Infrastructure 
+ 
+├── WPACS.Persistence 
+ 
+├── WPACS.Integration 
+ 
+├── WPACS.RuleEngine 
+ 
+├── WPACS.Reporting 
+
+ 
+├── WPACS.Workstation 
+ 
+├── WPACS.Shared 
+ 
+└── WPACS.Tests 
+ 
+4. CLEAN ARCHITECTURE 
+Presentation Layer 
+ 
+↓ 
+ 
+Application Layer 
+ 
+↓ 
+ 
+Domain Layer 
+ 
+↓ 
+ 
+Infrastructure Layer 
+Dependency Rule: 
+Outer Layers 
+Depend On 
+Inner Layers 
+ 
+Never Reverse 
+ 
+5. DOMAIN MODULES 
+Identity Module 
+Responsibilities 
+ Authentication  
+ Authorization  
+ MFA  
+ Session Management  
+ 
+Workforce Module 
+
+Responsibilities 
+ Employees  
+ Teams  
+ Departments  
+ 
+Event Module 
+Responsibilities 
+ Event Ingestion  
+ Event Processing  
+ Event Storage  
+ 
+Validation Module 
+Responsibilities 
+ State Correlation  
+ Rule Execution  
+ Conflict Detection  
+ 
+Productivity Module 
+Responsibilities 
+ Score Calculation  
+ Trend Analysis  
+ 
+Alert Module 
+Responsibilities 
+ Alert Generation  
+ Alert Delivery  
+
+ 
+Reporting Module 
+Responsibilities 
+ Report Generation  
+ Scheduling  
+ 
+6. DOMAIN ENTITIES 
+Employee 
+public class Employee 
+{ 
+    public Guid EmployeeId { get; set; } 
+ 
+    public string EmployeeNumber { get; set; } 
+ 
+    public Guid TeamId { get; set; } 
+ 
+    public Guid ManagerId { get; set; } 
+ 
+    public EmploymentStatus Status { get; set; } 
+} 
+ 
+Conflict 
+public class Conflict 
+{ 
+    public Guid ConflictId { get; set; } 
+ 
+    public Guid EmployeeId { get; set; } 
+ 
+    public string ConflictType { get; set; } 
+ 
+    public Severity Severity { get; set; } 
+ 
+    public decimal ConfidenceScore { get; set; } 
+} 
+ 
+7. EVENT DRIVEN ARCHITECTURE 
+
+Every activity becomes an event. 
+Workstation Event 
+ 
+↓ 
+ 
+Message Queue 
+ 
+↓ 
+ 
+Event Processor 
+ 
+↓ 
+ 
+Database 
+ 
+↓ 
+ 
+Validation Engine 
+ 
+↓ 
+ 
+Conflict Engine 
+ 
+↓ 
+ 
+Alert Engine 
+ 
+8. EVENT CONTRACT 
+public class EventEnvelope 
+{ 
+    public Guid EventId { get; set; } 
+ 
+    public Guid OrganizationId { get; set; } 
+ 
+    public Guid EmployeeId { get; set; } 
+ 
+    public string EventType { get; set; } 
+ 
+    public DateTime Timestamp { get; set; } 
+ 
+    public string SourceSystem { get; set; } 
+ 
+    public string Payload { get; set; } 
+} 
+ 
+9. INGESTION PIPELINE 
+
+API 
+ 
+↓ 
+ 
+Validation 
+ 
+↓ 
+ 
+Queue 
+ 
+↓ 
+ 
+Processor 
+ 
+↓ 
+ 
+Persistence 
+ 
+↓ 
+ 
+Correlation Engine 
+ 
+Requirements 
+ Retry Support  
+ Dead Letter Queue  
+ Idempotency  
+ Event Ordering  
+ 
+10. RABBITMQ TOPOLOGY 
+exchange.events 
+ 
+├── workstation.queue 
+ 
+├── tcn.queue 
+ 
+├── attendance.queue 
+ 
+├── schedule.queue 
+ 
+Dead Letter 
+events.dlq 
+ 
+
+11. EVENT PROCESSOR 
+Responsibilities 
+ Deserialize  
+ Validate  
+ Normalize  
+ Persist  
+ Publish  
+ 
+Pseudo Code 
+Receive Event 
+ 
+Validate 
+ 
+Normalize 
+ 
+Save Event 
+ 
+Publish Internal Event 
+ 
+12. STATE CORRELATION ENGINE 
+Purpose 
+Compare states from multiple systems. 
+Example 
+Dialer = READY 
+ 
+Workstation = LOCKED 
+↓ 
+Conflict 
+ 
+Processing Cycle 
+Event Received 
+ 
+
+↓ 
+ 
+Snapshot Updated 
+ 
+↓ 
+ 
+Rules Executed 
+ 
+↓ 
+ 
+Result Stored 
+ 
+13. SNAPSHOT ENGINE 
+Purpose 
+Maintain latest employee state. 
+EmployeeStateSnapshot 
+{ 
+    WorkstationState 
+ 
+    DialerState 
+ 
+    AttendanceState 
+ 
+    ScheduleState 
+ 
+    LastUpdated 
+} 
+ 
+14. RULE ENGINE ARCHITECTURE 
+Rule Repository 
+ 
+↓ 
+ 
+Rule Loader 
+ 
+↓ 
+ 
+Rule Compiler 
+ 
+↓ 
+ 
+Execution Engine 
+ 
+Rule Example 
+
+{ 
+  "rule": "READY_LOCKED", 
+ 
+  "conditions": [ 
+    { 
+      "field": "dialer_state", 
+      "operator": "=", 
+      "value": "READY" 
+    }, 
+    { 
+      "field": "workstation_state", 
+      "operator": "=", 
+      "value": "LOCKED" 
+    } 
+  ], 
+ 
+  "action": "CREATE_CONFLICT" 
+} 
+ 
+15. RULE EXECUTION FLOW 
+Snapshot 
+ 
+↓ 
+ 
+Load Rules 
+ 
+↓ 
+ 
+Evaluate 
+ 
+↓ 
+ 
+Execute Actions 
+ 
+↓ 
+ 
+Persist Results 
+ 
+16. CONFLICT ENGINE 
+Responsibilities 
+ Create Conflicts  
+ Update Conflicts  
+ Close Conflicts  
+ 
+
+Conflict Lifecycle 
+OPEN 
+ 
+↓ 
+ 
+ACKNOWLEDGED 
+ 
+↓ 
+ 
+INVESTIGATING 
+ 
+↓ 
+ 
+RESOLVED 
+ 
+↓ 
+ 
+CLOSED 
+ 
+17. PRODUCTIVITY ENGINE 
+Inputs 
+Workstation Activity 
+ 
+Dialer Activity 
+ 
+Attendance 
+ 
+Conflicts 
+ 
+Outputs 
+Productivity Score 
+ 
+Utilization Score 
+ 
+Compliance Score 
+ 
+Confidence Score 
+ 
+18. PRODUCTIVITY SERVICE 
+Interface 
+
+public interface IProductivityService 
+{ 
+    Task<ProductivityResult> 
+    CalculateAsync( 
+        Guid employeeId, 
+        DateOnly date 
+    ); 
+} 
+ 
+19. ALERT ENGINE 
+Trigger Sources 
+Validation 
+ 
+Conflict 
+ 
+Rule 
+ 
+System Health 
+ 
+Alert Types 
+PRODUCTIVITY_DROP 
+ 
+HIGH_CONFLICT 
+ 
+COMPLIANCE_RISK 
+ 
+SYSTEM_FAILURE 
+ 
+20. REPORTING ENGINE 
+Architecture 
+API 
+ 
+↓ 
+ 
+Queue 
+ 
+↓ 
+ 
+Background Worker 
+ 
+↓ 
+ 
+Generate File 
+
+ 
+↓ 
+ 
+Storage 
+ 
+↓ 
+ 
+Notification 
+ 
+21. BACKGROUND JOBS 
+Framework 
+Hangfire 
+Jobs 
+Nightly Aggregation 
+ 
+Rule Synchronization 
+ 
+Report Generation 
+ 
+Cleanup 
+ 
+Archiving 
+ 
+22. CACHING STRATEGY 
+Redis 
+Use Cases 
+User Sessions 
+ 
+Dashboard Metrics 
+ 
+Rule Cache 
+ 
+State Snapshots 
+ 
+TTL 
+Dashboard Cache = 60 sec 
+ 
+Rules = 15 min 
+
+ 
+Sessions = 60 min 
+ 
+23. REPOSITORY PATTERN 
+Example 
+public interface IEmployeeRepository 
+{ 
+    Task<Employee?> GetByIdAsync( 
+        Guid employeeId 
+    ); 
+ 
+    Task SaveAsync( 
+        Employee employee 
+    ); 
+} 
+ 
+24. CQRS IMPLEMENTATION 
+Commands 
+CreateEmployee 
+ 
+CreateRule 
+ 
+CreateConflict 
+ 
+Queries 
+GetEmployee 
+ 
+GetConflicts 
+ 
+GetDashboard 
+ 
+25. MEDIATOR PATTERN 
+Framework 
+MediatR 
+Example 
+
+CreateConflictCommand 
+ 
+↓ 
+ 
+Handler 
+ 
+↓ 
+ 
+Repository 
+ 
+26. SECURITY IMPLEMENTATION 
+Authentication 
+JWT Access Token 
+ 
+Refresh Token 
+ 
+Authorization 
+Role Based Access 
+ 
+Policies 
+CanViewEmployee 
+ 
+CanEditRule 
+ 
+CanManageUsers 
+ 
+27. AUDIT FRAMEWORK 
+Every change recorded. 
+Example 
+{ 
+  "entity": "Rule", 
+ 
+  "action": "UPDATE", 
+ 
+  "old_value": {}, 
+ 
+  "new_value": {} 
+} 
+
+ 
+28. OBSERV ABILITY 
+Logging 
+Serilog 
+ 
+Metrics 
+Prometheus 
+ 
+Monitoring 
+Grafana 
+ 
+Tracing 
+OpenTelemetry 
+ 
+29. ERROR HANDLING 
+Global Middleware 
+try 
+{ 
+} 
+catch(Exception ex) 
+{ 
+} 
+ 
+Response 
+{ 
+  "success": false, 
+ 
+  "message": "Unexpected Error" 
+} 
+ 
+30. DATABASE MIGRATIONS 
+
+Framework 
+Entity Framework Migrations 
+Commands 
+dotnet ef migrations add Initial 
+ 
+dotnet ef database update 
+ 
+31. TESTING STRATEGY 
+Unit Tests 
+xUnit 
+ 
+Mocking 
+Moq 
+ 
+Coverage Target 
+80% 
+ 
+32. DEPLOYMENT MODEL 
+Containers 
+Docker 
+ 
+Deployment 
+Kubernetes 
+ 
+Environment 
+DEV 
+ 
+QA 
+ 
+UAT 
+
+ 
+PROD 
+ 
+33. SCALABILITY TARGETS 
+100,000 Employees 
+ 
+5,000 Events/sec 
+ 
+500 Concurrent Managers 
+ 
+1 Million Events/day 
+ 
+34. PERFORMANCE REQUIREMENTS 
+Event Ingestion 
+<50 ms 
+ 
+Conflict Detection 
+<500 ms 
+ 
+Dashboard 
+<3 sec 
+ 
+35. DEFINITION OF DONE 
+Backend Architecture Complete When: 
+✓ Event ingestion implemented 
+✓ Rule engine implemented 
+✓ Validation engine implemented 
+✓ Conflict engine implemented 
+✓ Productivity engine implemented 
+
+✓ Reporting engine implemented 
+✓ Audit logging implemented 
+✓ Security implemented 
+✓ Monitoring implemented 
+✓ CI/CD ready 

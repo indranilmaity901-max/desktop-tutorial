@@ -1,0 +1,634 @@
+WPACS Infrastructure Design Specification 
+v1.0 
+Workforce Productivity & Activity Correlation System 
+Enterprise Infrastructure, Cloud Architecture & Production Operations 
+Specification 
+Document Purpose 
+This document defines the production infrastructure architecture required to deploy, operate, 
+secure, scale, monitor, and recover WPACS in enterprise environments. 
+Audience: 
+ DevOps Engineers  
+ Cloud Engineers  
+ Site Reliability Engineers (SRE)  
+ Security Engineers  
+ Infrastructure Architects  
+ Technical Leads  
+ 
+1. INFRASTRUCTURE PHILOSOPHY 
+WPACS infrastructure shall be: 
+ Highly Available  
+ Fault Tolerant  
+ Horizontally Scalable  
+ Secure by Default  
+ Observable  
+ Recoverable  
+ Cloud Agnostic  
+ 
+2. TARGET DEPLOYMENT MODEL 
+Internet 
+    │ 
+
+    ▼ 
+ 
+Load Balancer 
+ 
+    │ 
+ 
+API Gateway 
+ 
+    │ 
+ 
+┌─────────────────────┐ 
+│ Kubernetes Cluster  │ 
+└─────────────────────┘ 
+ 
+    │ 
+ 
+ ┌─────────────┬─────────────┬─────────────┐ 
+ 
+ Auth       Core         Reports 
+ 
+ Service    Service      Service 
+ 
+ └─────────────┴─────────────┘ 
+ 
+        RabbitMQ 
+ 
+            │ 
+ 
+        PostgreSQL 
+ 
+            │ 
+ 
+          Redis 
+ 
+            │ 
+ 
+      Object Storage 
+ 
+3. CLOUD STRATEGY 
+Supported Platforms 
+Primary 
+Amazon Web Services 
+ 
+Secondary 
+Microsoft Azure 
+
+ 
+Future 
+Google Cloud Platform 
+ 
+Deployment architecture must remain cloud-neutral. 
+ 
+4. ENVIRONMENT STRATEGY 
+Required Environments 
+DEV 
+ 
+QA 
+ 
+UAT 
+ 
+STAGING 
+ 
+PRODUCTION 
+ 
+Purpose 
+DEV 
+Developer testing 
+ 
+QA 
+Functional testing 
+ 
+UAT 
+Business validation 
+ 
+
+STAGING 
+Production simulation 
+ 
+PRODUCTION 
+Customer traffic 
+ 
+5. KUBERNETES ARCHITECTURE 
+Cluster Layout 
+WPACS Cluster 
+ 
+├── API Namespace 
+ 
+├── Processing Namespace 
+ 
+├── Reporting Namespace 
+ 
+├── Monitoring Namespace 
+ 
+├── Infrastructure Namespace 
+ 
+6. NODE POOLS 
+Application Nodes 
+4 vCPU 
+ 
+16 GB RAM 
+ 
+Processing Nodes 
+8 vCPU 
+ 
+32 GB RAM 
+ 
+Reporting Nodes 
+
+8 vCPU 
+ 
+32 GB RAM 
+ 
+Monitoring Nodes 
+4 vCPU 
+ 
+16 GB RAM 
+ 
+7. CONTAINERIZATION 
+All services deployed as: 
+Docker Containers 
+ 
+Naming Standard 
+wpacs-auth 
+ 
+wpacs-core 
+ 
+wpacs-rule-engine 
+ 
+wpacs-alert 
+ 
+wpacs-reporting 
+ 
+8. NETWORK ARCHITECTURE 
+Internet 
+ 
+↓ 
+ 
+WAF 
+ 
+↓ 
+ 
+Load Balancer 
+ 
+↓ 
+ 
+API Gateway 
+ 
+↓ 
+ 
+
+Kubernetes Services 
+ 
+↓ 
+ 
+Databases 
+ 
+9. NETWORK SEGMENTATION 
+Public Subnet 
+Load Balancer 
+ 
+WAF 
+ 
+Private Subnet 
+Application Services 
+ 
+Restricted Subnet 
+Database 
+ 
+Redis 
+ 
+RabbitMQ 
+ 
+10. DATABASE INFRASTRUCTURE 
+Primary Database 
+PostgreSQL 
+ 
+Architecture 
+Primary 
+ 
+↓ 
+ 
+Read Replica 
+ 
+↓ 
+
+ 
+Read Replica 
+ 
+Availability 
+Multi-AZ 
+ 
+11. DATABASE STORAGE 
+Initial 
+500 GB 
+ 
+Auto Growth 
+Enabled 
+ 
+Encryption 
+AES-256 
+ 
+12. REDIS INFRASTRUCTURE 
+Purpose 
+Caching 
+ 
+Session Storage 
+ 
+Snapshot Cache 
+ 
+Rule Cache 
+ 
+Deployment 
+Redis Cluster 
+ 
+High Availability 
+Enabled 
+
+ 
+13. RABBITMQ INFRASTRUCTURE 
+Cluster 
+3 Node Cluster 
+ 
+Queues 
+Workstation Events 
+ 
+TCN Events 
+ 
+Validation Events 
+ 
+Alert Events 
+ 
+Reporting Events 
+ 
+Dead Letter Queues 
+Required 
+ 
+14. OBJECT STORAGE 
+Purpose 
+Reports 
+ 
+Exports 
+ 
+Audit Archives 
+ 
+Backups 
+ 
+Storage Class 
+Standard 
+ 
+Archive 
+ 
+
+15. LOAD BALANCING 
+Strategy 
+Round Robin 
+ 
+Health Checks 
+Enabled 
+ 
+Automatic Failover 
+Enabled 
+ 
+16. API GATEWAY 
+Responsibilities 
+Authentication 
+ 
+Rate Limiting 
+ 
+Routing 
+ 
+Logging 
+ 
+Metrics 
+ 
+17. WEB APPLICATION FIREWALL 
+Protection 
+OWASP Top 10 
+ 
+SQL Injection 
+ 
+XSS 
+ 
+DDoS 
+ 
+18. SECRET MANAGEMENT 
+
+Secrets Never Stored In 
+Code 
+ 
+Git 
+ 
+Configuration Files 
+ 
+Secrets Stored In 
+Vault 
+Examples: 
+ Database Passwords  
+ JWT Keys  
+ API Keys  
+ Integration Credentials  
+ 
+19. IDENTITY PROVIDER 
+Supported 
+Azure AD 
+ 
+Okta 
+ 
+Google Workspace 
+ 
+Protocols 
+SAML 
+ 
+OAuth2 
+ 
+OpenID Connect 
+ 
+20. CI/CD PIPELINE 
+Source Control 
+GitHub 
+
+ 
+Pipeline 
+GitHub Actions 
+ 
+Flow 
+Commit 
+ 
+↓ 
+ 
+Build 
+ 
+↓ 
+ 
+Test 
+ 
+↓ 
+ 
+Security Scan 
+ 
+↓ 
+ 
+Package 
+ 
+↓ 
+ 
+Deploy 
+ 
+21. DEPLOYMENT STRATEGY 
+Method 
+Rolling Deployment 
+ 
+Future 
+Blue Green 
+ 
+Canary 
+ 
+22. OBSERV ABILITY STACK 
+
+Metrics 
+Prometheus 
+ 
+Visualization 
+Grafana 
+ 
+Logging 
+OpenSearch 
+ 
+Tracing 
+OpenTelemetry 
+ 
+23. LOGGING STANDARD 
+Every request receives: 
+Correlation ID 
+ 
+Request ID 
+ 
+Tenant ID 
+ 
+User ID 
+ 
+Log Levels 
+INFO 
+ 
+WARN 
+ 
+ERROR 
+ 
+CRITICAL 
+ 
+
+24. SYSTEM MONITORING 
+Monitor 
+CPU 
+ 
+Memory 
+ 
+Disk 
+ 
+Network 
+ 
+Database 
+ 
+Queues 
+ 
+API Latency 
+ 
+Event Throughput 
+ 
+25. ALERTING 
+Channels 
+Email 
+ 
+Teams 
+ 
+Slack 
+ 
+PagerDuty 
+ 
+Critical Alerts 
+Database Failure 
+ 
+Queue Failure 
+ 
+API Failure 
+ 
+Disk Exhaustion 
+ 
+26. BACKUP STRATEGY 
+Database 
+
+Hourly Incremental 
+ 
+Daily Full 
+ 
+Storage 
+Daily Snapshot 
+ 
+Retention 
+30 Days 
+ 
+90 Days 
+ 
+1 Year 
+ 
+27. DISASTER RECOVERY 
+Recovery Point Objective (RPO) 
+15 Minutes 
+ 
+Recovery Time Objective (RTO) 
+1 Hour 
+ 
+28. SECURITY OPERATIONS 
+Continuous Monitoring 
+Enabled 
+ 
+Vulnerability Scanning 
+Weekly 
+ 
+Penetration Testing 
+Quarterly 
+ 
+
+29. HIGH A V AILABILITY 
+Targets 
+99.9% SLA 
+ 
+Services 
+Multi-Instance 
+ 
+Auto Recovery 
+ 
+Self Healing 
+ 
+30. AUTO SCALING 
+Trigger Metrics 
+CPU 
+ 
+Memory 
+ 
+Queue Length 
+ 
+API Throughput 
+ 
+Scale Out 
+Automatic 
+ 
+31. EVENT PROCESSING CAPACITY 
+Target 
+5,000 Events/Second 
+ 
+Burst Capacity 
+15,000 Events/Second 
+ 
+
+32. STORAGE GROWTH ESTIMATION 
+1000 Agents 
+~50 GB/month 
+ 
+10000 Agents 
+~500 GB/month 
+ 
+50000 Agents 
+~2.5 TB/month 
+ 
+33. MULTI-TENANT ISOLATION 
+Isolation Levels 
+Application 
+ 
+Database 
+ 
+Storage 
+ 
+Tenant Access 
+Strictly Segregated 
+ 
+34. COMPLIANCE READINESS 
+Support 
+SOC 2 
+ 
+ISO 27001 
+ 
+PCI DSS (if required) 
+ 
+GDPR Controls 
+ 
+Audit Requirements 
+
+ 
+35. COST OPTIMIZATION 
+Methods 
+Auto Scaling 
+ 
+Storage Tiering 
+ 
+Archive Policies 
+ 
+Reserved Compute 
+ 
+Spot Instances For Non-Production 
+ 
+36. INFRASTRUCTURE AS CODE 
+Required 
+Terraform 
+Structure 
+terraform/ 
+ 
+├── network 
+ 
+├── kubernetes 
+ 
+├── database 
+ 
+├── monitoring 
+ 
+├── storage 
+ 
+├── security 
+ 
+37. PRODUCTION READINESS 
+CHECKLIST 
+Infrastructure cannot go live until: 
+✓ Multi-AZ enabled 
+
+✓ Backups validated 
+✓ Monitoring operational 
+✓ Alerting operational 
+✓ Secrets externalized 
+✓ WAF enabled 
+✓ SSL enabled 
+✓ Disaster recovery tested 
+✓ Vulnerability scan passed 
+✓ Penetration test completed 
+ 
+38. ESTIMATED MVP INFRASTRUCTURE 
+COST 
+For approximately: 
+500 Agents 
+Expected monthly cloud cost: 
+$300–$800/month 
+ 
+For: 
+5,000 Agents 
+Expected monthly cloud cost: 
+$2,000–$6,000/month 
+ 
+For: 
+50,000 Agents 
+
+Expected monthly cloud cost: 
+$15,000–$40,000/month 
+ 
+39. DEFINITION OF DONE 
+Infrastructure Specification Complete When: 
+✓ Deployment topology defined 
+✓ Kubernetes architecture defined 
+✓ Database architecture defined 
+✓ Monitoring defined 
+✓ Backup defined 
+✓ Disaster recovery defined 
+✓ Security controls defined 
+✓ Scaling strategy defined 
+✓ Cost strategy defined 
+✓ IaC strategy defined 
+ 

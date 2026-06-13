@@ -1,0 +1,613 @@
+WPACS State Correlation & Validation 
+Engine Specification v1.0 
+Workforce Productivity & Activity Correlation System 
+Core Validation Logic, State Correlation & Conflict Determination Framework 
+ 
+1. DOCUMENT PURPOSE 
+This document defines the core intelligence layer of WPACS. 
+The State Correlation & Validation Engine determines whether an employee's workstation 
+activity aligns with their operational state. 
+This engine is the heart of WPACS. 
+Without it: 
+WPACS becomes event storage. 
+ 
+Not operational intelligence. 
+ 
+2. CORE OBJECTIVE 
+Determine: 
+Is the employee state valid? 
+ 
+Or 
+ 
+Does a conflict exist? 
+ 
+3. SOURCE SYSTEMS 
+Current MVP Sources 
+Workstation Agent 
+ 
+TCN Dialer 
+
+ 
+Future Sources 
+Attendance Systems 
+ 
+WFM Systems 
+ 
+VPN Systems 
+ 
+VDI Systems 
+ 
+SSO Providers 
+ 
+4. STATE CORRELATION 
+ARCHITECTURE 
+Workstation Events 
+          │ 
+          ▼ 
+ 
+State Snapshot Engine 
+ 
+          │ 
+          ▼ 
+ 
+Validation Engine 
+ 
+          │ 
+          ▼ 
+ 
+Rule Engine 
+ 
+          │ 
+          ▼ 
+ 
+Conflict Engine 
+ 
+          │ 
+          ▼ 
+ 
+Productivity Engine 
+ 
+5. MASTER STATE SNAPSHOT 
+Each employee maintains one live snapshot. 
+
+{ 
+  "employee_id": "uuid", 
+ 
+  "workstation_state": "ACTIVE", 
+ 
+  "dialer_state": "READY", 
+ 
+  "attendance_state": "CLOCKED_IN", 
+ 
+  "last_updated": "timestamp" 
+} 
+ 
+6. WORKSTATION STATE MODEL 
+Valid States 
+UNKNOWN 
+ 
+OFFLINE 
+ 
+LOGIN 
+ 
+ACTIVE 
+ 
+IDLE 
+ 
+LOCKED 
+ 
+DISCONNECTED 
+ 
+LOGOUT 
+ 
+SHUTDOWN 
+ 
+SLEEP 
+ 
+HIBERNATE 
+ 
+7. TCN STATE MODEL 
+Supported States 
+READY 
+ 
+ON_CALL 
+ 
+WRAP 
+ 
+BREAK 
+
+ 
+LUNCH 
+ 
+MEETING 
+ 
+TRAINING 
+ 
+OFFLINE 
+ 
+8. V ALIDATION PHILOSOPHY 
+WPACS does NOT determine intent. 
+WPACS determines alignment. 
+Example: 
+READY + ACTIVE 
+Result 
+Valid 
+ 
+Example 
+READY + LOCKED 
+Result 
+Conflict 
+ 
+9. V ALIDATION CATEGORIES 
+VALID 
+ 
+WARNING 
+ 
+CONFLICT 
+ 
+CRITICAL 
+ 
+10. V ALIDATION MATRIX (MVP) 
+
+Dialer State Workstation State Result 
+READY ACTIVE VALID 
+READY IDLE WARNING 
+READY LOCKED CONFLICT 
+READY OFFLINE CRITICAL 
+ON_CALL ACTIVE VALID 
+ON_CALL IDLE WARNING 
+ON_CALL LOCKED CRITICAL 
+ON_CALL OFFLINE CRITICAL 
+BREAK ACTIVE VALID 
+BREAK LOCKED VALID 
+BREAK IDLE VALID 
+LUNCH LOCKED VALID 
+LUNCH ACTIVE VALID 
+ 
+11. STATE PRIORITY MODEL 
+Multiple workstation states may occur. 
+Priority: 
+OFFLINE 
+ 
+LOCKED 
+ 
+IDLE 
+ 
+ACTIVE 
+Example: 
+
+ACTIVE 
+ 
++ 
+ 
+LOCKED 
+Final State 
+LOCKED 
+ 
+12. STATE TRANSITION ENGINE 
+Every state transition recorded. 
+Example 
+ACTIVE 
+ 
+↓ 
+ 
+IDLE 
+ 
+↓ 
+ 
+LOCKED 
+ 
+↓ 
+ 
+ACTIVE 
+ 
+13. TRANSITION V ALIDATION 
+Example 
+READY 
+ 
++ 
+ 
+LOCKED 
+for 
+2 seconds 
+Result 
+Ignored 
+
+ 
+Example 
+READY 
+ 
++ 
+ 
+LOCKED 
+for 
+5 minutes 
+Result 
+Conflict 
+ 
+14. MINIMUM DURATION THRESHOLDS 
+Event Threshold 
+Idle 60 sec 
+Lock 30 sec 
+Offline 60 sec 
+Disconnect 60 sec 
+ 
+15. CONFIDENCE SCORING MODEL 
+Every conflict receives confidence. 
+Formula: 
+Data Completeness 
+ 
++ 
+ 
+Timestamp Accuracy 
+ 
++ 
+
+ 
+Source Reliability 
+ 
++ 
+ 
+Duration Accuracy 
+ 
+Output 
+0-100 
+ 
+16. CONFIDENCE CLASSIFICATION 
+Score Meaning 
+95-100 Very High 
+85-94 High 
+70-84 Medium 
+Below 70 Low 
+ 
+17. TIMESTAMP NORMALIZATION 
+All timestamps converted to: 
+UTC 
+ 
+Format 
+ISO-8601 
+ 
+18. CLOCK DRIFT DETECTION 
+Validate 
+
+Agent Time 
+ 
+vs 
+ 
+Server Time 
+ 
+Maximum Drift 
+60 Seconds 
+ 
+If exceeded: 
+Confidence Reduced 
+ 
+19. SHARED WORKSTATION HANDLING 
+Scenario 
+User A Logout 
+ 
+↓ 
+ 
+User B Login 
+ 
+Required 
+Session Boundary Creation 
+ 
+Never merge sessions. 
+ 
+20. FAST USER SWITCHING 
+Detect 
+Session Switch 
+ 
+Generate 
+
+SESSION_DISCONNECT 
+ 
+SESSION_RECONNECT 
+ 
+21. REMOTE DESKTOP DETECTION 
+Supported 
+RDP 
+ 
+Citrix 
+ 
+Azure Virtual Desktop 
+ 
+Capture 
+Session Type 
+ 
+Example 
+{ 
+  "session_type": "RDP" 
+} 
+ 
+22. VIRTUAL DESKTOP SUPPORT 
+Supported 
+VMWare 
+ 
+Citrix 
+ 
+AVD 
+ 
+Windows 365 
+ 
+Store 
+Virtual Machine Identifier 
+ 
+
+23. VPN AWARENESS (MVP+) 
+Capture 
+VPN Connected 
+ 
+VPN Disconnected 
+ 
+Purpose 
+Improve Confidence 
+ 
+24. SLEEP / HIBERNATE DETECTION 
+Capture 
+SLEEP 
+ 
+WAKE 
+ 
+HIBERNATE 
+ 
+Validation Example 
+READY 
+ 
++ 
+ 
+SLEEP 
+Result 
+CRITICAL 
+ 
+25. OFFLINE DETECTION 
+Conditions 
+Heartbeat Missing 
+ 
+Threshold 
+
+120 Seconds 
+ 
+State 
+OFFLINE 
+ 
+26. HEARTBEAT V ALIDATION 
+Expected 
+60 Seconds 
+ 
+Missing 
+2 Consecutive Heartbeats 
+ 
+Trigger 
+Offline Investigation 
+ 
+27. CONFLICT CREATION RULES 
+Conflict Created When: 
+Validation Result 
+ 
+= 
+ 
+CONFLICT 
+ 
+OR 
+ 
+CRITICAL 
+ 
+28. CONFLICT SEVERITY MODEL 
+Validation Result Severity 
+
+Validation Result Severity 
+Warning Low 
+Conflict Medium 
+Critical High 
+ 
+29. CONFLICT TYPES 
+READY_LOCKED 
+ 
+READY_OFFLINE 
+ 
+ONCALL_LOCKED 
+ 
+ONCALL_OFFLINE 
+ 
+READY_IDLE 
+ 
+WRAP_OFFLINE 
+ 
+30. FALSE POSITIVE PROTECTION 
+Protection Mechanisms 
+Duration Threshold 
+ 
+Clock Drift Check 
+ 
+Duplicate Event Check 
+ 
+Source Validation 
+ 
+Confidence Score 
+ 
+31. EVENT ORDERING 
+All events processed using: 
+Event Timestamp 
+ 
+Then 
+
+ 
+Receive Timestamp 
+ 
+Out-of-order events allowed. 
+ 
+32. SNAPSHOT REBUILD 
+Purpose 
+Recover state. 
+ 
+Process 
+Historical Events 
+ 
+↓ 
+ 
+Replay 
+ 
+↓ 
+ 
+Rebuild Snapshot 
+ 
+33. HISTORICAL REPROCESSING 
+Required 
+When: 
+Rules Changed 
+ 
+Bug Fixed 
+ 
+Investigation Requested 
+ 
+34. EXPLAINABILITY FRAMEWORK 
+Every conflict must explain itself. 
+
+Example 
+{ 
+  "conflict_type": "READY_LOCKED", 
+ 
+  "reason": 
+  "Agent locked workstation while dialer remained READY", 
+ 
+  "duration_seconds": 420 
+} 
+ 
+35. INVESTIGATION TIMELINE 
+Required 
+State Timeline 
+ 
+Event Timeline 
+ 
+Rule Timeline 
+ 
+Example 
+08:00 ACTIVE 
+ 
+08:10 READY 
+ 
+08:15 LOCKED 
+ 
+08:16 CONFLICT CREATED 
+ 
+36. PRODUCTIVITY IMPACT ENGINE 
+Each conflict impacts: 
+Productivity Score 
+ 
+Compliance Score 
+ 
+Confidence Score 
+ 
+37. RULE EXECUTION ORDER 
+
+Priority 
+Critical 
+ 
+High 
+ 
+Medium 
+ 
+Low 
+ 
+38. V ALIDATION PERFORMANCE 
+TARGETS 
+Single Employee Validation 
+<50 ms 
+ 
+Conflict Detection 
+<500 ms 
+ 
+Snapshot Update 
+<20 ms 
+ 
+39. TEST SCENARIOS 
+Minimum Required 
+READY + ACTIVE 
+ 
+READY + IDLE 
+ 
+READY + LOCKED 
+ 
+READY + OFFLINE 
+ 
+ONCALL + LOCKED 
+ 
+ONCALL + OFFLINE 
+ 
+BREAK + ACTIVE 
+ 
+
+BREAK + LOCKED 
+ 
+LUNCH + ACTIVE 
+ 
+Minimum Test Cases 
+500+ 
+ 
+40. FUTURE EXPANSION 
+Additional State Sources 
+Attendance 
+ 
+VPN 
+ 
+WFM 
+ 
+SSO 
+ 
+Physical Access Control 
+ 
+Badge Readers 
+ 
+41. DEFINITION OF DONE 
+Validation Engine Complete When: 
+✓ Snapshot Engine Operational 
+✓ State Correlation Operational 
+✓ Validation Matrix Implemented 
+✓ Conflict Generation Operational 
+✓ Confidence Scoring Operational 
+✓ Timeline Generation Operational 
+✓ Explainability Operational 
+✓ Historical Reprocessing Operational 
+
+✓ Performance Targets Met 
+ 
+42. CTO BRUTAL REVIEW 
+This document is closer to the actual intellectual property of WPACS than almost any other 
+document written so far. 
+The database, APIs, frontend, and infrastructure are largely standard enterprise software patterns. 
+What differentiates WPACS is: 
+State Correlation Logic 
+ 
+Validation Matrix 
+ 
+Confidence Scoring 
+ 
+Conflict Classification 
+ 
+Explainability Model 
+These are the components that determine whether WPACS becomes: 
+A monitoring tool 
+ 
+OR 
+ 
+An operational intelligence platform. 
+However, there is still one major gap before a development team can build with minimal 
+ambiguity: 
+Missing Critical Artifact 
+WPACS Rule Engine DSL & Configuration Specification v1.0 
+That document would define: 
+ Rule language syntax  
+ Rule schema  
+ Rule evaluation model  
+ Rule versioning  
+ Rule inheritance  
+ Rule testing framework  
+ Rule deployment workflow  
+ Rule rollback mechanism  
+
+Without that specification, every developer may implement rules differently, creating 
+inconsistency across environments. It is the final document that formalizes the "brain" of 
+WPACS. 
+ 

@@ -1,0 +1,590 @@
+WPACS Workstation Agent Engineering 
+Specification v1.0 
+Workforce Productivity & Activity Correlation System 
+Endpoint Monitoring Agent Architecture & Engineering Standard 
+ 
+1. DOCUMENT PURPOSE 
+This document defines the architecture, behavior, deployment model, security requirements, 
+event collection standards, and operational controls for the WPACS Workstation Agent. 
+The Workstation Agent is the primary telemetry source for WPACS. 
+Without this component: 
+No workstation visibility 
+ 
+No activity correlation 
+ 
+No productivity calculation 
+ 
+No state validation 
+ 
+2. AGENT MISSION 
+The agent must answer: 
+Who is using the workstation? 
+ 
+When are they using it? 
+ 
+What state is the workstation in? 
+ 
+Is the workstation active? 
+ 
+Is the workstation idle? 
+ 
+Is the workstation locked? 
+ 
+Is the workstation disconnected? 
+ 
+What applications are running? 
+
+ 
+What workstation events occurred? 
+ 
+3. DESIGN PRINCIPLES 
+The agent must be: 
+Lightweight 
+ 
+Non-Intrusive 
+ 
+Low CPU Usage 
+ 
+Low Memory Usage 
+ 
+Tamper Resistant 
+ 
+Always Running 
+ 
+Self Recovering 
+ 
+Secure 
+ 
+4. TECHNOLOGY STACK 
+Recommended 
+Language: C# 
+ 
+Framework: .NET 9 Worker Service 
+ 
+Platform: Windows 
+ 
+Service Type: Windows Service 
+ 
+Packaging: MSI 
+ 
+Installer: WiX Toolset 
+ 
+Communication: HTTPS 
+ 
+Queue Buffer: LiteDB 
+ 
+5. HIGH LEVEL ARCHITECTURE 
+
+Windows Workstation 
+ 
+│ 
+ 
+├── WPACS Agent Service 
+ 
+├── Event Collector 
+ 
+├── State Monitor 
+ 
+├── Buffer Engine 
+ 
+├── Secure Transport 
+ 
+└── Self-Healing Service 
+ 
+        │ 
+ 
+        ▼ 
+ 
+WPACS API Gateway 
+ 
+6. AGENT COMPONENTS 
+Event Collector 
+Responsibilities: 
+Capture workstation events 
+ 
+Normalize events 
+ 
+Forward to queue 
+ 
+State Monitor 
+Responsibilities: 
+Current state tracking 
+ 
+Idle monitoring 
+ 
+Lock monitoring 
+ 
+Session monitoring 
+ 
+
+Transport Service 
+Responsibilities: 
+Compress 
+ 
+Encrypt 
+ 
+Transmit 
+ 
+Local Buffer 
+Responsibilities: 
+Offline storage 
+ 
+Retry queue 
+ 
+Recovery support 
+ 
+7. WINDOWS SERVICE DESIGN 
+Service Name 
+WPACSAgent 
+Display Name 
+WPACS Workstation Monitoring Service 
+Startup Type 
+Automatic 
+Recovery 
+Restart On Failure 
+ 
+8. AGENT STARTUP FLOW 
+Machine Boot 
+ 
+↓ 
+
+ 
+Windows Service Starts 
+ 
+↓ 
+ 
+Load Configuration 
+ 
+↓ 
+ 
+Validate Identity 
+ 
+↓ 
+ 
+Connect WPACS 
+ 
+↓ 
+ 
+Initialize Monitoring 
+ 
+↓ 
+ 
+Begin Event Collection 
+ 
+9. WORKSTATION EVENTS 
+The agent must capture: 
+LOGIN 
+ 
+LOGOUT 
+ 
+LOCK 
+ 
+UNLOCK 
+ 
+SHUTDOWN 
+ 
+RESTART 
+ 
+SESSION_DISCONNECT 
+ 
+SESSION_RECONNECT 
+ 
+IDLE_START 
+ 
+IDLE_END 
+ 
+10. USER SESSION MONITORING 
+
+Monitor: 
+Windows Username 
+ 
+Session ID 
+ 
+Login Time 
+ 
+Logout Time 
+ 
+Session Duration 
+ 
+Event Example 
+{ 
+  "event_type": "LOGIN", 
+  "username": "john.smith", 
+  "timestamp": "2026-06-01T08:00:00Z" 
+} 
+ 
+11. LOCK / UNLOCK DETECTION 
+Detect: 
+Windows Lock 
+ 
+Windows Unlock 
+Methods 
+Session Switch Events 
+ 
+Windows API 
+ 
+Example 
+{ 
+  "event_type": "LOCK", 
+  "timestamp": "2026-06-01T09:00:00Z" 
+} 
+ 
+12. IDLE DETECTION 
+Purpose 
+
+Determine inactivity periods. 
+ 
+Idle Thresholds 
+Default = 5 Minutes 
+Configurable 
+1 
+ 
+5 
+ 
+10 
+ 
+15 
+ 
+20 
+ 
+30 
+Minutes 
+ 
+13. IDLE DETECTION ENGINE 
+Monitor 
+Mouse 
+ 
+Keyboard 
+Implementation 
+GetLastInputInfo() 
+ 
+States 
+ACTIVE 
+ 
+IDLE 
+ 
+14. IDLE EVENTS 
+
+Generated 
+IDLE_START 
+ 
+IDLE_END 
+ 
+Example 
+{ 
+  "event_type": "IDLE_START", 
+  "duration": 300 
+} 
+ 
+15. MACHINE IDENTIFICATION 
+Identifiers 
+Hostname 
+ 
+Device ID 
+ 
+Windows SID 
+ 
+Organization ID 
+ 
+Generated Device Record 
+{ 
+  "device_id": "GUID", 
+  "hostname": "WS-001" 
+} 
+ 
+16. USER MAPPING 
+Purpose 
+Associate workstation activity with employee records. 
+ 
+Mapping Methods 
+Priority Order 
+
+Employee Login Mapping 
+ 
+SSO Mapping 
+ 
+Manual Mapping 
+ 
+17. PROCESS MONITORING (OPTIONAL 
+MVP+) 
+Future Capability 
+Capture 
+Process Name 
+ 
+Start Time 
+ 
+End Time 
+ 
+Example 
+{ 
+  "process": "excel.exe" 
+} 
+ 
+18. APPLICATION MONITORING 
+(OPTIONAL MVP+) 
+Future Capability 
+Active Window 
+ 
+Foreground Application 
+ 
+Application Usage Duration 
+ 
+Not Required for MVP. 
+ 
+
+19. SCREEN MONITORING 
+Policy 
+NOT ALLOWED 
+The agent shall not: 
+Capture Screenshots 
+ 
+Record Video 
+ 
+Capture Keystrokes 
+ 
+Read Clipboard Data 
+This is a major trust and privacy requirement. 
+ 
+20. CONFIGURATION MANAGEMENT 
+Configuration Source 
+WPACS Server 
+ 
+Configurable Values 
+Idle Threshold 
+ 
+Heartbeat Interval 
+ 
+Retry Count 
+ 
+Endpoint URL 
+ 
+21. HEARTBEAT SYSTEM 
+Purpose 
+Verify agent health. 
+ 
+
+Frequency 
+60 Seconds 
+ 
+Payload 
+{ 
+  "agent_version": "1.0", 
+  "hostname": "WS-001", 
+  "status": "HEALTHY" 
+} 
+ 
+22. EVENT TRANSPORT 
+Protocol 
+HTTPS 
+ 
+Method 
+POST 
+ 
+Endpoint 
+/api/v1/workstation/events 
+ 
+23. TRANSPORT SECURITY 
+Requirements 
+TLS 1.3 
+ 
+Certificate Validation 
+ 
+JWT Authentication 
+ 
+24. LOCAL EVENT BUFFER 
+Purpose 
+
+Offline operation. 
+ 
+Storage 
+LiteDB 
+ 
+Retention 
+72 Hours 
+ 
+25. OFFLINE MODE 
+Scenario 
+Network Unavailable 
+Behavior 
+Continue Monitoring 
+ 
+Store Events 
+ 
+Retry Upload 
+ 
+26. RETRY STRATEGY 
+Attempt 1 
+Immediate 
+ 
+Attempt 2 
+30 Seconds 
+ 
+Attempt 3 
+1 Minute 
+ 
+
+Attempt 4 
+5 Minutes 
+ 
+Maximum 
+24 Hours 
+ 
+27. EVENT BATCHING 
+Batch Size 
+100 Events 
+ 
+Maximum Payload 
+1 MB 
+ 
+28. AGENT SELF-HEALING 
+Monitor 
+Service Status 
+ 
+Transport 
+ 
+Buffer 
+ 
+Recovery 
+Restart Components 
+ 
+Restart Service 
+ 
+Log Error 
+ 
+29. AGENT UPDATES 
+Update Model 
+
+Centralized 
+ 
+Process 
+Download 
+ 
+Verify Signature 
+ 
+Install 
+ 
+Restart 
+ 
+30. VERSION MANAGEMENT 
+Example 
+1.0.0 
+ 
+1.0.1 
+ 
+1.1.0 
+ 
+2.0.0 
+ 
+31. DIGITAL SIGNING 
+Requirement 
+Mandatory 
+Every installer must be code-signed. 
+ 
+32. RESOURCE CONSUMPTION 
+TARGETS 
+CPU 
+<1% 
+Average 
+
+ 
+Memory 
+<150 MB 
+ 
+Disk 
+<500 MB 
+ 
+33. TAMPER RESISTANCE 
+Detect 
+Service Stop 
+ 
+Service Disable 
+ 
+Configuration Modification 
+ 
+Agent Removal 
+ 
+Generate Alert 
+AGENT_TAMPER_DETECTED 
+ 
+34. OBSERV ABILITY 
+Agent Logs 
+INFO 
+ 
+WARN 
+ 
+ERROR 
+ 
+Retention 
+30 Days 
+ 
+
+35. AGENT API CONTRACT 
+Event Submission 
+POST /api/v1/workstation/events 
+ 
+Heartbeat 
+POST /api/v1/workstation/heartbeat 
+ 
+Configuration Sync 
+GET /api/v1/workstation/config 
+ 
+36. INSTALLATION FLOW 
+MSI Launch 
+ 
+↓ 
+ 
+Admin Approval 
+ 
+↓ 
+ 
+Install Service 
+ 
+↓ 
+ 
+Register Device 
+ 
+↓ 
+ 
+Sync Configuration 
+ 
+↓ 
+ 
+Start Monitoring 
+ 
+37. ENTERPRISE DEPLOYMENT 
+Supported 
+
+Microsoft Intune 
+ 
+SCCM 
+ 
+Group Policy 
+ 
+Manual MSI 
+ 
+38. TESTING REQUIREMENTS 
+Validate 
+✓ Login 
+✓ Logout 
+✓ Lock 
+✓ Unlock 
+✓ Idle 
+✓ Reconnect 
+✓ Offline Mode 
+✓ Retry Logic 
+✓ Self Healing 
+✓ Upgrade 
+ 
+39. DEFINITION OF DONE 
+Agent Complete When: 
+✓ Windows Service operational 
+✓ Event collection operational 
+✓ Lock monitoring operational 
+
+✓ Idle monitoring operational 
+✓ Secure transport operational 
+✓ Offline buffering operational 
+✓ Self-healing operational 
+✓ Auto update operational 
+✓ Resource targets achieved 
+ 

@@ -1,0 +1,742 @@
+WPACS Frontend Engineering Specification 
+v1.0 
+Workforce Productivity & Activity Correlation System 
+Enterprise Frontend Architecture & Engineering Standard 
+Document Purpose 
+This document defines the frontend architecture, engineering standards, component design, state 
+management, API integration strategy, testing framework, and deployment standards for 
+WPACS. 
+Audience: 
+ Frontend Engineers  
+ UI Engineers  
+ UI/UX Designers  
+ QA Engineers  
+ Technical Leads  
+ 
+1. FRONTEND ARCHITECTURE 
+OVERVIEW 
+WPACS frontend shall be a modern Single Page Application (SPA). 
+Browser 
+ 
+↓ 
+ 
+React Application 
+ 
+↓ 
+ 
+API Gateway 
+ 
+↓ 
+ 
+Backend Services 
+ 
+
+2. TECHNOLOGY STACK 
+Core Framework 
+Framework: React 19 
+ 
+Language: TypeScript 
+ 
+Build Tool: Vite 
+ 
+Package Manager: pnpm 
+ 
+Routing: React Router 
+ 
+State Management: Redux Toolkit 
+ 
+Data Fetching: TanStack Query 
+ 
+Forms: React Hook Form 
+ 
+Validation: Zod 
+ 
+Charts: Recharts 
+ 
+UI Components: Material UI 
+ 
+Styling: TailwindCSS 
+ 
+Testing: Vitest 
+ 
+E2E Testing: Playwright 
+ 
+3. PROJECT STRUCTURE 
+src/ 
+ 
+├── app 
+ 
+├── assets 
+ 
+├── components 
+ 
+├── features 
+ 
+├── layouts 
+ 
+├── pages 
+ 
+├── routes 
+ 
+├── services 
+
+ 
+├── store 
+ 
+├── hooks 
+ 
+├── types 
+ 
+├── utils 
+ 
+├── constants 
+ 
+├── styles 
+ 
+└── tests 
+ 
+4. APPLICATION ARCHITECTURE 
+Architecture Pattern 
+Feature Driven Architecture 
+Structure 
+features/ 
+ 
+├── employees 
+ 
+├── productivity 
+ 
+├── conflicts 
+ 
+├── alerts 
+ 
+├── reports 
+ 
+├── dashboard 
+ 
+├── rules 
+ 
+├── administration 
+ 
+5. ROUTING STRUCTURE 
+/ 
+ 
+/login 
+ 
+/dashboard 
+ 
+
+/dashboard/executive 
+ 
+/dashboard/manager 
+ 
+/dashboard/employee 
+ 
+/employees 
+ 
+/employees/:id 
+ 
+/conflicts 
+ 
+/conflicts/:id 
+ 
+/productivity 
+ 
+/reports 
+ 
+/alerts 
+ 
+/rules 
+ 
+/admin 
+ 
+/settings 
+ 
+6. AUTHENTICATION FLOW 
+Login 
+ 
+↓ 
+ 
+JWT Token 
+ 
+↓ 
+ 
+Secure Storage 
+ 
+↓ 
+ 
+API Access 
+ 
+↓ 
+ 
+Refresh Token 
+ 
+Protected Route Example 
+const ProtectedRoute = () => { 
+  const isAuthenticated = useAuth(); 
+ 
+  if (!isAuthenticated) 
+
+      return <Navigate to="/login" />; 
+ 
+  return <Outlet />; 
+}; 
+ 
+7. ROLE-BASED ACCESS CONTROL 
+Roles 
+EMPLOYEE 
+ 
+TEAM_LEAD 
+ 
+MANAGER 
+ 
+ADMIN 
+ 
+EXECUTIVE 
+ 
+Authorization Hook 
+const hasPermission = ( 
+ role: string, 
+ permission: string 
+) => { 
+}; 
+ 
+8. LAYOUT SYSTEM 
+Primary Layout 
+Header 
+ 
+Sidebar 
+ 
+Content 
+ 
+Footer 
+ 
+React Layout 
+<AppLayout> 
+ 
+  <Header /> 
+ 
+  <Sidebar /> 
+
+ 
+  <MainContent /> 
+ 
+</AppLayout> 
+ 
+9. DESIGN SYSTEM 
+Components 
+Button 
+ 
+Card 
+ 
+Modal 
+ 
+Table 
+ 
+Input 
+ 
+Select 
+ 
+Tabs 
+ 
+Badge 
+ 
+Tooltip 
+ 
+Toast 
+ 
+Drawer 
+ 
+Rule 
+No screen shall create custom UI before checking Design System. 
+ 
+10. DASHBOARD COMPONENTS 
+Widgets 
+Productivity Widget 
+ 
+Compliance Widget 
+ 
+Conflict Widget 
+ 
+Alert Widget 
+
+ 
+Trend Widget 
+ 
+Confidence Widget 
+ 
+Widget Structure 
+<DashboardCard 
+ title="" 
+ value="" 
+ trend="" 
+ /> 
+ 
+11. PAGE ARCHITECTURE 
+Example 
+Employee Page 
+Page 
+ 
+↓ 
+ 
+Container 
+ 
+↓ 
+ 
+Feature Component 
+ 
+↓ 
+ 
+Reusable Components 
+ 
+Example 
+<EmployeePage> 
+ 
+  <EmployeeHeader /> 
+ 
+  <EmployeeMetrics /> 
+ 
+  <EmployeeTimeline /> 
+ 
+  <EmployeeConflicts /> 
+ 
+</EmployeePage> 
+ 
+
+12. API CLIENT 
+Centralized API Layer 
+axios.create({ 
+  baseURL: API_URL 
+}); 
+ 
+Folder 
+services/ 
+ 
+├── auth 
+ 
+├── employees 
+ 
+├── conflicts 
+ 
+├── reports 
+ 
+├── rules 
+ 
+13. API RESPONSE STANDARD 
+interface ApiResponse<T> 
+{ 
+   success:boolean; 
+ 
+   data:T; 
+ 
+   message:string; 
+ 
+   errors:string[]; 
+} 
+ 
+14. REACT QUERY STANDARD 
+Example 
+const { data } = useQuery({ 
+  queryKey:["employees"], 
+  queryFn:getEmployees 
+}); 
+ 
+
+Benefits 
+Caching 
+ 
+Retry 
+ 
+Pagination 
+ 
+Synchronization 
+ 
+15. STATE MANAGEMENT 
+Redux Stores 
+auth 
+ 
+user 
+ 
+dashboard 
+ 
+alerts 
+ 
+settings 
+ 
+Example 
+store/ 
+ 
+├── authSlice 
+ 
+├── userSlice 
+ 
+├── dashboardSlice 
+ 
+├── alertSlice 
+ 
+16. FORM FRAMEWORK 
+Libraries 
+React Hook Form 
+ 
+Zod 
+ 
+Example 
+
+const schema = z.object({ 
+ email:z.string().email() 
+}); 
+ 
+17. TABLE FRAMEWORK 
+Used For 
+Employees 
+ 
+Conflicts 
+ 
+Reports 
+ 
+Rules 
+ 
+Audit Logs 
+ 
+Features 
+Sorting 
+ 
+Filtering 
+ 
+Export 
+ 
+Pagination 
+ 
+Column Selection 
+ 
+18. EMPLOYEE DIRECTORY PAGE 
+Components 
+Search Bar 
+ 
+Filters 
+ 
+Employee Table 
+ 
+Export Button 
+ 
+Data Source 
+GET /employees 
+ 
+
+19. EMPLOYEE PROFILE PAGE 
+Sections 
+Overview 
+ 
+Productivity 
+ 
+Timeline 
+ 
+Conflicts 
+ 
+Alerts 
+ 
+Component Structure 
+<EmployeeProfile> 
+ 
+ <Overview /> 
+ 
+ <Metrics /> 
+ 
+ <Timeline /> 
+ 
+ <ConflictHistory /> 
+ 
+</EmployeeProfile> 
+ 
+20. CONFLICT MANAGEMENT PAGE 
+Components 
+Conflict Table 
+ 
+Severity Filter 
+ 
+Date Filter 
+ 
+Manager Filter 
+ 
+Data Source 
+GET /conflicts 
+ 
+
+21. CONFLICT DETAIL PAGE 
+Widgets 
+Summary 
+ 
+Timeline 
+ 
+Evidence 
+ 
+Rule 
+ 
+Resolution 
+ 
+22. REPORTING MODULE 
+Components 
+Report Builder 
+ 
+Saved Reports 
+ 
+Export Center 
+ 
+Schedule Reports 
+ 
+Export Formats 
+PDF 
+ 
+Excel 
+ 
+CSV 
+ 
+23. RULE BUILDER UI 
+Architecture 
+Visual Builder 
+ 
+Example 
+IF 
+ 
+
+READY 
+ 
+AND 
+ 
+LOCKED 
+ 
+THEN 
+ 
+CONFLICT 
+ 
+Components 
+Condition Builder 
+ 
+Action Builder 
+ 
+Preview 
+ 
+Validation 
+ 
+24. DASHBOARD CHARTS 
+Chart Types 
+Line 
+ 
+Bar 
+ 
+Pie 
+ 
+Area 
+ 
+Heatmap 
+ 
+Rules 
+Responsive 
+ 
+Accessible 
+ 
+Printable 
+ 
+25. REAL-TIME UPDATES 
+Technology 
+
+SignalR 
+ 
+Used For 
+Alerts 
+ 
+Conflicts 
+ 
+Dashboard Updates 
+ 
+Flow 
+Backend Event 
+ 
+↓ 
+ 
+SignalR Hub 
+ 
+↓ 
+ 
+Frontend 
+ 
+↓ 
+ 
+Update Widget 
+ 
+26. ERROR HANDLING 
+Global Error Boundary 
+<ErrorBoundary> 
+ 
+ <App /> 
+ 
+</ErrorBoundary> 
+ 
+API Error Handler 
+401 → Logout 
+ 
+403 → Access Denied 
+ 
+500 → Error Screen 
+ 
+27. LOADING STATES 
+
+Required 
+Skeleton Loader 
+ 
+Spinner 
+ 
+Progress Bar 
+ 
+No blank screen allowed. 
+ 
+28. NOTIFICATION SYSTEM 
+Types 
+Success 
+ 
+Warning 
+ 
+Error 
+ 
+Information 
+ 
+Component 
+<Toast /> 
+ 
+29. ACCESSIBILITY 
+Standard 
+WCAG 2.1 AA 
+ 
+Requirements 
+Keyboard Navigation 
+ 
+ARIA Labels 
+ 
+Screen Readers 
+ 
+Focus Management 
+ 
+
+30. RESPONSIVE DESIGN 
+Breakpoints 
+Mobile 
+ 
+Tablet 
+ 
+Desktop 
+ 
+Ultra Wide 
+ 
+Minimum Supported 
+1366x768 
+ 
+31. PERFORMANCE TARGETS 
+First Load 
+<3 seconds 
+ 
+Page Transition 
+<500 ms 
+ 
+Dashboard Refresh 
+<1 second 
+ 
+32. FRONTEND SECURITY 
+Requirements 
+XSS Protection 
+ 
+CSRF Protection 
+ 
+Content Security Policy 
+ 
+Secure Cookies 
+
+ 
+Never Store 
+Passwords 
+ 
+Secrets 
+ 
+API Keys 
+ 
+33. TESTING STRATEGY 
+Unit Testing 
+Vitest 
+ 
+Component Testing 
+React Testing Library 
+ 
+E2E Testing 
+Playwright 
+ 
+Coverage 
+80% 
+ 
+34. CI/CD PIPELINE 
+Build 
+pnpm install 
+ 
+pnpm build 
+ 
+pnpm test 
+ 
+Artifacts 
+Docker Image 
+
+ 
+Deployment 
+Kubernetes 
+ 
+35. FRONTEND MONITORING 
+Monitoring 
+Sentry 
+ 
+Track 
+Errors 
+ 
+Performance 
+ 
+User Sessions 
+ 
+Page Failures 
+ 
+36. COMPONENT HIERARCHY 
+App 
+ 
+├── Layout 
+ 
+├── Dashboard 
+ 
+├── Employees 
+ 
+├── Conflicts 
+ 
+├── Reports 
+ 
+├── Rules 
+ 
+├── Administration 
+ 
+37. CODE STANDARDS 
+Rules 
+
+Strict TypeScript 
+ 
+No Any Types 
+ 
+ESLint 
+ 
+Prettier 
+ 
+Husky Pre-Commit Hooks 
+ 
+38. DEFINITION OF DONE 
+Frontend Specification Complete When: 
+✓ Architecture Defined 
+✓ Routing Defined 
+✓ Components Defined 
+✓ State Management Defined 
+✓ API Integration Defined 
+✓ Security Defined 
+✓ Accessibility Defined 
+✓ Testing Defined 
+✓ CI/CD Defined 
+✓ Performance Targets Defined 

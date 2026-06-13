@@ -1,0 +1,87 @@
+[
+  {
+    "file": "WPACS API Contracts Specification v1.pdf",
+    "pages": 15,
+    "words": 787
+  },
+  {
+    "file": "WPACS Backend Engineering Specification v1.pdf",
+    "pages": 19,
+    "words": 786
+  },
+  {
+    "file": "WPACS Commercialization.pdf",
+    "pages": 20,
+    "words": 971
+  },
+  {
+    "file": "WPACS Customer Onboarding.pdf",
+    "pages": 19,
+    "words": 861
+  },
+  {
+    "file": "WPACS Database Design Specification v1.pdf",
+    "pages": 17,
+    "words": 990
+  },
+  {
+    "file": "WPACS Enterprise Program Governance.pdf",
+    "pages": 20,
+    "words": 883
+  },
+  {
+    "file": "WPACS Explainability.pdf",
+    "pages": 17,
+    "words": 934
+  },
+  {
+    "file": "WPACS Frontend Engineering Specification v1.pdf",
+    "pages": 19,
+    "words": 749
+  },
+  {
+    "file": "WPACS Infrastructure Design Specification v1.pdf",
+    "pages": 19,
+    "words": 766
+  },
+  {
+    "file": "WPACS Product Requirements Document.pdf",
+    "pages": 10,
+    "words": 523
+  },
+  {
+    "file": "WPACS QA Engineering.pdf",
+    "pages": 20,
+    "words": 858
+  },
+  {
+    "file": "WPACS Rule Engine DSL.pdf",
+    "pages": 18,
+    "words": 754
+  },
+  {
+    "file": "WPACS Security Architecture.pdf",
+    "pages": 20,
+    "words": 845
+  },
+  {
+    "file": "WPACS Sprint 0 Engineering Execution Plan v1.pdf",
+    "pages": 17,
+    "words": 797
+  },
+  {
+    "file": "WPACS State Correlation.pdf",
+    "pages": 19,
+    "words": 895
+  },
+  {
+    "file": "WPACS UX Specification v1.0.pdf",
+    "pages": 23,
+    "words": 906
+  },
+  {
+    "file": "WPACS Workstation Agent Engineering Specification v1.pdf",
+    "pages": 18,
+    "words": 794
+  }
+]

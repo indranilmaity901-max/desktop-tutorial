@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>WPACS Dashboard</title>
+    <link rel="stylesheet" href="/src/styles.css?v=20260605-managers">
+    <script>
+      window.addEventListener("error", (event) => {
+        document.documentElement.dataset.appError = event.message || "error";
+      });
+      window.addEventListener("unhandledrejection", (event) => {
+        document.documentElement.dataset.appError = event.reason?.message || String(event.reason);
+      });
+    </script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
+    <script type="module" src="/src/main.js?v=20260605-managers"></script>
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
