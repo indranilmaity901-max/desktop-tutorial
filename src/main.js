@@ -60,7 +60,6 @@ const demoCredentials = {
   username: "admin",
   password_hash: "admin_hash_001"
 };
-const staticDemoMode = window.location.hostname.endsWith("github.io");
 const frontendResponsibilities = [
   {
     icon: "database",
@@ -1254,7 +1253,7 @@ function attachLoginHandler() {
         result.textContent = `Status: failed | ${data.message}`;
       }
     } catch {
-      const demoUser = staticDemoMode ? demoLogin(payload) : null;
+      const demoUser = demoLogin(payload);
       if (demoUser) {
         currentUser = demoUser;
         sessionStorage.setItem("wpacsUser", JSON.stringify(currentUser));
@@ -1262,9 +1261,7 @@ function attachLoginHandler() {
         return;
       }
 
-      result.textContent = staticDemoMode
-        ? "Status: failed | Use demo credentials: admin / admin_hash_001"
-        : "Status: failed | API unavailable";
+      result.textContent = "Status: failed | Use demo credentials: admin / admin_hash_001";
     }
   });
 }
