@@ -168,7 +168,8 @@ function sidebar() {
       title: "Operations",
       items: [
         ["activity", "Productivity", "#productivity"],
-        ["file-bar-chart", "Reports", "#reports"]
+        ["file-bar-chart", "Reports", "#reports"],
+        ["monitor-dot", "Agent Dashboard", "#agent-dashboard"]
       ]
     },
     {
@@ -914,6 +915,59 @@ function workstationAgentPanel() {
   `;
 }
 
+function agentDashboardSlot() {
+  return `
+    <section class="panel wide agent-dashboard-slot" id="agent-dashboard">
+      <div class="panel-header">
+        <div>
+          <h2>Agent Dashboard</h2>
+          <p>Reserved workspace for the next agent-facing dashboard integration.</p>
+        </div>
+        <span class="status-pill neutral">Integration slot open</span>
+      </div>
+
+      <div class="agent-slot-layout">
+        <div class="agent-slot-preview">
+          <div class="agent-slot-toolbar">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div class="agent-slot-empty">
+            ${icon("panel-top-open")}
+            <strong>Agent dashboard canvas</strong>
+            <span>Drop the agent module here when the live agent UI is ready.</span>
+          </div>
+        </div>
+
+        <div class="agent-slot-details">
+          <article>
+            ${icon("plug-zap")}
+            <div>
+              <strong>API handoff</strong>
+              <span>Ready for agent status, task queue, AUX state, and activity events.</span>
+            </div>
+          </article>
+          <article>
+            ${icon("layout-panel-left")}
+            <div>
+              <strong>UI space reserved</strong>
+              <span>Wide panel keeps room for agent KPIs, live queue, coaching, and evidence views.</span>
+            </div>
+          </article>
+          <article>
+            ${icon("shield-check")}
+            <div>
+              <strong>Governance aligned</strong>
+              <span>Agent actions can stay approval-gated and auditable inside WPACS.</span>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 function enterpriseReadinessPanel() {
   return `
     <section class="panel wide" id="enterprise-readiness">
@@ -1146,6 +1200,7 @@ function dashboard() {
           ${alertPanel()}
           ${reportsPanel()}
           ${conflictQueue()}
+          ${agentDashboardSlot()}
           ${administrationPanel()}
           ${healthPanel()}
         </div>
