@@ -56,6 +56,11 @@ let reportDate = "2026-06-05";
 let reportDownloadDate = "2026-06-05";
 let dailyAttendanceReport = null;
 let dailyProductivityReport = null;
+const demoCredentials = {
+  username: "admin",
+  password_hash: "admin_hash_001"
+};
+const staticDemoMode = window.location.hostname.endsWith("github.io");
 const frontendResponsibilities = [
   {
     icon: "database",
@@ -108,6 +113,25 @@ function formatPercent(value) {
 
 function formatHours(minutes) {
   return `${(Number(minutes || 0) / 60).toFixed(2)}h`;
+}
+
+function demoLogin(payload) {
+  if (
+    payload.username !== demoCredentials.username ||
+    payload.password_hash !== demoCredentials.password_hash
+  ) {
+    return null;
+  }
+
+  const role = rolesData.find((item) => item.role_name === payload.role_name) || rolesData[0];
+  return {
+    user_id: "USER-DEMO-001",
+    username: demoCredentials.username,
+    status: "ACTIVE",
+    created_date: "2026-06-05",
+    role_id: role.role_id,
+    role_name: role.role_name
+  };
 }
 
 function metricCard({ label, value, trend, tone = "positive", evidenceKey, href }) {
@@ -1175,7 +1199,17 @@ function attachLoginHandler() {
         result.textContent = `Status: failed | ${data.message}`;
       }
     } catch {
-      result.textContent = "Status: failed | API unavailable";
+      const demoUser = staticDemoMode ? demoLogin(payload) : null;
+      if (demoUser) {
+        currentUser = demoUser;
+        sessionStorage.setItem("wpacsUser", JSON.stringify(currentUser));
+        render();
+        return;
+      }
+
+      result.textContent = staticDemoMode
+        ? "Status: failed | Use demo credentials: admin / admin_hash_001"
+        : "Status: failed | API unavailable";
     }
   });
 }
