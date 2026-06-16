@@ -167,9 +167,27 @@ def employee_exists(employee_id):
     return bool(query_one("SELECT employee_id FROM employees WHERE employee_id = %s", (employee_id,)))
 
 
-def dashboard_payload():
+def manager_employee_clause(session, employee_alias="e"):
+    user = session["user"]
+    if normalize_role(user.get("role")) == "MANAGER":
+        return f" AND {employee_alias}.manager_id = %s", (str(user.get("user_id")),)
+    return "", ()
+
+
+def can_access_employee(session, employee_id):
+    if normalize_role(session["user"].get("role")) != "MANAGER":
+        return True
+    employee = query_one(
+        "SELECT employee_id FROM employees WHERE employee_id = %s AND manager_id = %s",
+        (employee_id, str(session["user"].get("user_id"))),
+    )
+    return bool(employee)
+
+
+def dashboard_payload(session):
+    employee_filter, employee_params = manager_employee_clause(session, "e")
     totals = query_one(
-        """
+        f"""
         SELECT
           COUNT(*) AS employees,
           ROUND(AVG(productivity_score)) AS productivity_score,
@@ -178,24 +196,34 @@ def dashboard_payload():
           COUNT(p.productivity_id) AS productivity_records
         FROM employees e
         LEFT JOIN productivity p ON p.employee_id = e.employee_id
-        """
+        WHERE TRUE {employee_filter}
+        """,
+        employee_params,
     ) or {}
+    attendance_filter, attendance_params = manager_employee_clause(session, "e")
     attendance = query_one(
-        """
+        f"""
         SELECT
           COUNT(*) AS records,
-          COALESCE(SUM(worked_hours), 0) AS worked_hours
-        FROM attendance
-        """
+          COALESCE(SUM(a.worked_hours), 0) AS worked_hours
+        FROM attendance a
+        JOIN employees e ON e.employee_id = a.employee_id
+        WHERE TRUE {attendance_filter}
+        """,
+        attendance_params,
     ) or {}
+    trend_filter, trend_params = manager_employee_clause(session, "e")
     trend = query(
-        """
-        SELECT report_date::text AS label, ROUND(AVG(productivity_score))::int AS value
-        FROM productivity
-        GROUP BY report_date
-        ORDER BY report_date DESC
+        f"""
+        SELECT p.report_date::text AS label, ROUND(AVG(p.productivity_score))::int AS value
+        FROM productivity p
+        JOIN employees e ON e.employee_id = p.employee_id
+        WHERE TRUE {trend_filter}
+        GROUP BY p.report_date
+        ORDER BY p.report_date DESC
         LIMIT 10
-        """
+        """,
+        trend_params,
     )
     return {
         "metrics": {
@@ -292,6 +320,9 @@ class Handler(SimpleHTTPRequestHandler):
             if not employee_exists(employee_id):
                 self.send_json(400, response(False, message="Selected employee does not exist"))
                 return
+            if not can_access_employee(session, employee_id):
+                self.send_json(403, response(False, message="Access denied for this employee"))
+                return
             execute(
                 """
                 INSERT INTO attendance (employee_id, attendance_date, status, worked_hours)
@@ -309,6 +340,8 @@ class Handler(SimpleHTTPRequestHandler):
             payload = self.read_json()
             employee_id = str(payload.get("employee_id", "")).strip()
             manager_id = str(payload.get("manager_id") or "").strip() or None
+            if normalize_role(session["user"].get("role")) == "MANAGER":
+                manager_id = str(session["user"].get("user_id"))
             if not employee_id or not payload.get("employee_name") or not payload.get("department"):
                 self.send_json(400, response(False, message="Employee ID, name, and department are required"))
                 return
@@ -347,6 +380,9 @@ class Handler(SimpleHTTPRequestHandler):
                 return
             if not employee_exists(employee_id):
                 self.send_json(400, response(False, message="Selected employee does not exist"))
+                return
+            if not can_access_employee(session, employee_id):
+                self.send_json(403, response(False, message="Access denied for this employee"))
                 return
             productivity = query_one(
                 """
@@ -448,8 +484,13 @@ class Handler(SimpleHTTPRequestHandler):
             employee_id = urllib.parse.unquote(parsed.path.rsplit("/", 1)[-1])
             payload = self.read_json()
             manager_id = str(payload.get("manager_id") or "").strip() or None
+            if normalize_role(session["user"].get("role")) == "MANAGER":
+                manager_id = str(session["user"].get("user_id"))
             if not employee_exists(employee_id):
                 self.send_json(404, response(False, message="Employee not found"))
+                return
+            if not can_access_employee(session, employee_id):
+                self.send_json(403, response(False, message="Access denied for this employee"))
                 return
             if not payload.get("employee_name") or not payload.get("department"):
                 self.send_json(400, response(False, message="Employee name and department are required"))
@@ -491,6 +532,9 @@ class Handler(SimpleHTTPRequestHandler):
             if not employee:
                 self.send_json(404, response(False, message="Employee not found"))
                 return
+            if not can_access_employee(session, employee_id):
+                self.send_json(403, response(False, message="Access denied for this employee"))
+                return
             execute("DELETE FROM users WHERE employee_id = %s", (employee_id,))
             execute("DELETE FROM employees WHERE employee_id = %s", (employee_id,))
             audit_event(session, "Employee Deleted", employee_id, f"Deleted employee {employee.get('employee_name')}")
@@ -518,17 +562,19 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/live-dashboard" or parsed.path == "/api/v1/dashboard":
-            if not require_roles(self, "ADMIN", "MANAGER", "SUPERVISOR"):
+            session = require_roles(self, "ADMIN", "MANAGER", "SUPERVISOR")
+            if not session:
                 return
-            self.send_json(200, response(True, dashboard_payload()))
+            self.send_json(200, response(True, dashboard_payload(session)))
             return
 
         if parsed.path == "/api/v1/employees":
             session = require_roles(self, "ADMIN", "MANAGER")
             if not session:
                 return
+            employee_filter, employee_params = manager_employee_clause(session, "e")
             self.send_json(200, response(True, query(
-                """
+                f"""
                 SELECT
                   e.employee_id,
                   e.employee_name,
@@ -539,21 +585,26 @@ class Handler(SimpleHTTPRequestHandler):
                   e.created_at
                 FROM employees e
                 LEFT JOIN users manager ON manager.user_id::text = e.manager_id
+                WHERE TRUE {employee_filter}
                 ORDER BY e.created_at DESC, e.employee_name
-                """
+                """,
+                employee_params,
             )))
             return
 
         if parsed.path == "/api/v1/employee-options":
-            if not require_roles(self, "ADMIN", "MANAGER", "SUPERVISOR"):
+            session = require_roles(self, "ADMIN", "MANAGER", "SUPERVISOR")
+            if not session:
                 return
+            employee_filter, employee_params = manager_employee_clause(session, "e")
             self.send_json(200, response(True, query(
-                """
+                f"""
                 SELECT employee_id, employee_name, department, status
-                FROM employees
-                WHERE status = 'ACTIVE'
+                FROM employees e
+                WHERE status = 'ACTIVE' {employee_filter}
                 ORDER BY employee_name
-                """
+                """,
+                employee_params,
             )))
             return
 
@@ -561,15 +612,19 @@ class Handler(SimpleHTTPRequestHandler):
             session = require_roles(self, "ADMIN", "MANAGER")
             if not session:
                 return
+            manager_filter = "AND u.user_id = %s" if normalize_role(session["user"].get("role")) == "MANAGER" else ""
+            manager_params = (session["user"].get("user_id"),) if manager_filter else ()
             self.send_json(200, response(True, query(
-                """
+                f"""
                 SELECT u.user_id::text AS manager_id, u.username AS manager_name
                 FROM users u
                 JOIN roles r ON r.role_id = u.role_id
                 WHERE UPPER(r.role_name) = 'MANAGER'
                   AND u.active = TRUE
+                  {manager_filter}
                 ORDER BY u.username
-                """
+                """,
+                manager_params,
             )))
             return
 
@@ -604,6 +659,9 @@ class Handler(SimpleHTTPRequestHandler):
             params = urllib.parse.parse_qs(parsed.query)
             employee_id = params.get("employee_id", [None])[0]
             if employee_id:
+                if not can_access_employee(session, employee_id):
+                    self.send_json(403, response(False, message="Access denied for this employee"))
+                    return
                 data = query(
                     """
                     SELECT a.attendance_id, a.employee_id, e.employee_name, a.attendance_date, a.status, a.worked_hours, a.created_at
@@ -615,13 +673,16 @@ class Handler(SimpleHTTPRequestHandler):
                     (employee_id,),
                 )
             else:
+                employee_filter, employee_params = manager_employee_clause(session, "e")
                 data = query(
-                    """
+                    f"""
                     SELECT a.attendance_id, a.employee_id, e.employee_name, a.attendance_date, a.status, a.worked_hours, a.created_at
                     FROM attendance a
                     JOIN employees e ON e.employee_id = a.employee_id
+                    WHERE TRUE {employee_filter}
                     ORDER BY a.attendance_date DESC
-                    """
+                    """,
+                    employee_params,
                 )
             self.send_json(200, response(True, data))
             return
@@ -633,6 +694,9 @@ class Handler(SimpleHTTPRequestHandler):
             params = urllib.parse.parse_qs(parsed.query)
             employee_id = params.get("employee_id", [None])[0]
             if employee_id:
+                if not can_access_employee(session, employee_id):
+                    self.send_json(403, response(False, message="Access denied for this employee"))
+                    return
                 data = query(
                     """
                     SELECT p.productivity_id, p.employee_id, e.employee_name, p.productive_hours, p.non_productive_hours, p.productivity_score, p.report_date
@@ -644,13 +708,16 @@ class Handler(SimpleHTTPRequestHandler):
                     (employee_id,),
                 )
             else:
+                employee_filter, employee_params = manager_employee_clause(session, "e")
                 data = query(
-                    """
+                    f"""
                     SELECT p.productivity_id, p.employee_id, e.employee_name, p.productive_hours, p.non_productive_hours, p.productivity_score, p.report_date
                     FROM productivity p
                     JOIN employees e ON e.employee_id = p.employee_id
+                    WHERE TRUE {employee_filter}
                     ORDER BY p.report_date DESC
-                    """
+                    """,
+                    employee_params,
                 )
             self.send_json(200, response(True, data))
             return
