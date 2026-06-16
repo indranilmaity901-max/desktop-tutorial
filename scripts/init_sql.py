@@ -73,6 +73,15 @@ with psycopg.connect(DATABASE_URL) as connection:
                 (admin_username, hash_password(admin_password), role_id),
             )
 
+        cursor.execute("SELECT to_regclass('public.attendance_logs')")
+        if cursor.fetchone()[0]:
+            cursor.execute("DELETE FROM attendance_logs WHERE employee_id ~ '^EMP-[0-9]{3}$'")
+        cursor.execute("SELECT to_regclass('public.productivity_logs')")
+        if cursor.fetchone()[0]:
+            cursor.execute("DELETE FROM productivity_logs WHERE employee_id ~ '^EMP-[0-9]{3}$'")
+        cursor.execute("DELETE FROM attendance WHERE employee_id ~ '^EMP-[0-9]{3}$'")
+        cursor.execute("DELETE FROM productivity WHERE employee_id ~ '^EMP-[0-9]{3}$'")
+        cursor.execute("DELETE FROM users WHERE employee_id ~ '^EMP-[0-9]{3}$'")
         cursor.execute("DELETE FROM employees WHERE employee_id ~ '^EMP-[0-9]{3}$'")
         for table_name in LEGACY_TABLES:
             cursor.execute(f'DROP TABLE IF EXISTS "{table_name}" CASCADE')
