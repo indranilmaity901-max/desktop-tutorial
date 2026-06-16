@@ -87,6 +87,8 @@ class WindowsSessionAgent:
         self.heartbeat_seconds = heartbeat_seconds
         self.stop_event = threading.Event()
         self.hwnd = None
+        self.authenticated = False
+        self.shift_started = False
 
     def emit(self, event_type):
         self.client.send_event(event_type)
@@ -94,8 +96,10 @@ class WindowsSessionAgent:
 
     def start(self):
         self.client.authenticate()
+        self.authenticated = True
         self.emit("LOGIN")
         self.emit("SHIFT_START")
+        self.shift_started = True
         threading.Thread(target=self.heartbeat_loop, daemon=True).start()
         self.register_shutdown_handlers()
         self.run_message_loop()
@@ -104,7 +108,12 @@ class WindowsSessionAgent:
         if self.stop_event.is_set():
             return
         self.stop_event.set()
-        for event_type in ("SHIFT_END", "LOGOFF"):
+        if not self.authenticated:
+            return
+        event_types = ["LOGOFF"]
+        if self.shift_started:
+            event_types.insert(0, "SHIFT_END")
+        for event_type in event_types:
             try:
                 self.emit(event_type)
             except Exception as error:
