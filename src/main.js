@@ -7,6 +7,8 @@ const state = {
   attendance: [],
   productivity: [],
   reports: [],
+  roles: [],
+  users: [],
   agentProfile: {},
   heartbeat: readHeartbeat()
 };
@@ -116,7 +118,10 @@ function sidebar() {
     : [
         { title: "WPACS Manager", items: [["radar", "Manager Dashboard", "#manager-dashboard", true]] },
         { title: "Workforce", items: [["users", "Employees", "#employees"], ["calendar-check", "Attendance", "#attendance"]] },
-        { title: "Operations", items: [["activity", "Productivity", "#productivity"], ["file-bar-chart", "Reports", "#reports"]] }
+        { title: "Operations", items: [["activity", "Productivity", "#productivity"], ["file-bar-chart", "Reports", "#reports"]] },
+        ...(state.user?.role_name === "Admin"
+          ? [{ title: "Administration", items: [["user-cog", "Users", "#users"]] }]
+          : [])
       ];
 
   return `
@@ -249,6 +254,7 @@ function managerDashboard() {
       ${attendancePanel()}
       ${productivityPanel()}
       ${reportsPanel()}
+      ${state.user?.role_name === "Admin" ? usersPanel() : ""}
     </div>
   `);
 }
@@ -388,6 +394,49 @@ function reportsPanel() {
           </table>
         </div>
       ` : emptyState("No report records found.")}
+    </section>
+  `;
+}
+
+function usersPanel() {
+  return `
+    <section class="panel wide" id="users">
+      <div class="panel-header">
+        <div>
+          <h2>Users</h2>
+          <p>Admin account creation and access management.</p>
+        </div>
+      </div>
+      <form class="employee-form" id="userForm">
+        <input name="username" required aria-label="Username">
+        <input name="password" type="password" required aria-label="Password">
+        <select name="role_name" required aria-label="Role">
+          ${state.roles.map((role) => `<option value="${escapeHtml(role.role_name)}">${escapeHtml(role.role_name)}</option>`).join("")}
+        </select>
+        <input name="employee_id" aria-label="Employee ID for agent account">
+        <select name="active" required aria-label="Active">
+          <option value="true">ACTIVE</option>
+          <option value="false">INACTIVE</option>
+        </select>
+        <button type="submit">${icon("user-plus")} Save User</button>
+      </form>
+      ${state.users.length ? `
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Username</th><th>Role</th><th>Employee</th><th>Status</th></tr></thead>
+            <tbody>
+              ${state.users.map((user) => `
+                <tr>
+                  <td><strong>${escapeHtml(user.username)}</strong></td>
+                  <td>${escapeHtml(user.role_name)}</td>
+                  <td>${escapeHtml(user.employee_id || "")}</td>
+                  <td><span class="state">${user.active ? "ACTIVE" : "INACTIVE"}</span></td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      ` : emptyState("No user accounts found.")}
     </section>
   `;
 }
@@ -535,6 +584,25 @@ function attachHandlers() {
       await loadData();
     });
   }
+
+  const userForm = document.querySelector("#userForm");
+  if (userForm) {
+    userForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const formData = new FormData(userForm);
+      await api("/api/v1/users", {
+        method: "POST",
+        body: JSON.stringify({
+          username: formData.get("username"),
+          password: formData.get("password"),
+          role_name: formData.get("role_name"),
+          employee_id: formData.get("employee_id"),
+          active: formData.get("active") === "true"
+        })
+      });
+      await loadData();
+    });
+  }
 }
 
 async function loadData() {
@@ -551,6 +619,8 @@ async function loadData() {
       state.attendance = await api("/api/v1/attendance");
       state.productivity = await api("/api/v1/productivity");
       state.reports = await api("/api/v1/reports");
+      state.roles = await api("/api/v1/roles");
+      state.users = state.user?.role_name === "Admin" ? await api("/api/v1/users") : [];
     }
   } catch (error) {
     state.error = error.message;

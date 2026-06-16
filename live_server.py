@@ -62,6 +62,12 @@ def hash_password(password):
     return f"pbkdf2_sha256${iterations}${salt}${digest.hex()}"
 
 
+def normalize_bool(value):
+    if isinstance(value, bool):
+        return value
+    return str(value).lower() not in ("false", "0", "inactive", "no")
+
+
 def verify_password(password, stored_hash):
     try:
         algorithm, iterations, salt, expected = stored_hash.split("$", 3)
@@ -293,6 +299,38 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json(201, response(True, productivity, "Productivity saved"))
             return
 
+        if parsed.path == "/api/v1/users":
+            session = require_roles(self, "Admin")
+            if not session:
+                return
+            payload = self.read_json()
+            username = str(payload.get("username", "")).strip()
+            password = str(payload.get("password", ""))
+            role_name = str(payload.get("role_name", "")).strip()
+            employee_id = payload.get("employee_id") or None
+            if not username or not password or not role_name:
+                self.send_json(400, response(False, message="Username, password, and role are required"))
+                return
+            role = query_one("SELECT role_id FROM roles WHERE role_name = %s", (role_name,))
+            if not role:
+                self.send_json(400, response(False, message="Invalid role"))
+                return
+            user = query_one(
+                """
+                INSERT INTO users (username, password_hash, role_id, employee_id, active)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (username) DO UPDATE SET
+                  password_hash = EXCLUDED.password_hash,
+                  role_id = EXCLUDED.role_id,
+                  employee_id = EXCLUDED.employee_id,
+                  active = EXCLUDED.active
+                RETURNING user_id, username, role_id, employee_id, active
+                """,
+                (username, hash_password(password), role["role_id"], employee_id, normalize_bool(payload.get("active", True))),
+            )
+            self.send_json(201, response(True, user, "User account saved"))
+            return
+
         if parsed.path == "/api/v1/reports":
             session = require_roles(self, "Admin", "Manager", "Supervisor")
             if not session:
@@ -345,6 +383,29 @@ class Handler(SimpleHTTPRequestHandler):
                 SELECT employee_id, employee_name, department, manager_id, status, created_at
                 FROM employees
                 ORDER BY created_at DESC, employee_name
+                """
+            )))
+            return
+
+        if parsed.path == "/api/v1/roles":
+            session = require_roles(self, "Admin", "Manager", "Supervisor")
+            if not session:
+                return
+            self.send_json(200, response(True, query(
+                "SELECT role_id, role_name FROM roles ORDER BY role_name"
+            )))
+            return
+
+        if parsed.path == "/api/v1/users":
+            session = require_roles(self, "Admin")
+            if not session:
+                return
+            self.send_json(200, response(True, query(
+                """
+                SELECT u.user_id, u.username, r.role_name, u.employee_id, u.active
+                FROM users u
+                JOIN roles r ON r.role_id = u.role_id
+                ORDER BY u.user_id DESC
                 """
             )))
             return

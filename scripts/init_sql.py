@@ -65,7 +65,10 @@ with psycopg.connect(DATABASE_URL) as connection:
                 """
                 INSERT INTO users (username, password_hash, role_id, active)
                 VALUES (%s, %s, %s, TRUE)
-                ON CONFLICT (username) DO NOTHING
+                ON CONFLICT (username) DO UPDATE SET
+                  password_hash = EXCLUDED.password_hash,
+                  role_id = EXCLUDED.role_id,
+                  active = TRUE
                 """,
                 (admin_username, hash_password(admin_password), role_id),
             )
