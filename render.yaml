@@ -2,13 +2,16 @@ services:
   - type: web
     name: wpacs-dashboard
     runtime: python
-    plan: free
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python scripts/init_postgres.py && python live_server.py"
+    buildCommand: ""
+    startCommand: "python scripts/init_sql.py && python live_server.py"
     envVars:
       - key: HOST
         value: 0.0.0.0
-      - key: DATABASE_URL
-        sync: false
       - key: PUBLIC_URL
         value: https://dashboard.wpacs.com
+      - key: DATABASE_URL
+        sync: false
+      - key: WPACS_ADMIN_USERNAME
+        sync: false
+      - key: WPACS_ADMIN_PASSWORD
+        sync: false
