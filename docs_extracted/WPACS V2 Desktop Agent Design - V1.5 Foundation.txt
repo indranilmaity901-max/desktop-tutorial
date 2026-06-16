@@ -1,0 +1,43 @@
+WPACS V2 Desktop Agent Design - V1.5 Foundation
+
+Status: design only. Do not implement in V1.5.
+
+Purpose
+The future WPACS Desktop Agent will submit workstation state events to the existing V1.5 event API. It must only report approved operational state transitions needed for attendance, agent status, and productivity calculations.
+
+Supported future events
+LOCK
+UNLOCK
+LOGIN
+LOGOUT
+HEARTBEAT
+
+Event contract
+Each agent event must map to the existing workstation_events table and POST /api/v2/events contract:
+employee_id
+event_type
+event_timestamp
+source
+
+Security boundaries
+The desktop agent must authenticate through a production identity mechanism before event submission.
+The backend remains the system of record for RBAC, audit logging, productivity calculation, and manager visibility.
+Managers may only view employees assigned to them.
+Supervisors remain read-only and limited to assigned operational scope.
+
+Explicit exclusions
+The desktop agent must not capture screenshots.
+The desktop agent must not log keystrokes.
+The desktop agent must not track mouse movement.
+The desktop agent must not collect browser history, application titles, document names, message content, screen contents, camera data, microphone data, or file contents.
+The desktop agent must not implement surveillance features.
+
+V1.5 dependency
+The desktop agent depends on the V1.5 event foundation:
+agent_status
+workstation_events
+productivity_daily
+POST /api/v2/events
+GET /api/v2/agent-status
+GET /api/v2/productivity
+WebSocket live updates at /api/v2/live

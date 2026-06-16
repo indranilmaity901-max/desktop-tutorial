@@ -11,8 +11,10 @@ const state = {
   users: [],
   managers: [],
   employeeOptions: [],
-  agentProfile: {},
-  heartbeat: readHeartbeat()
+  agentDashboard: null,
+  agentStatuses: [],
+  dailyProductivity: [],
+  liveSocket: null
 };
 
 function icon(name) {
@@ -28,61 +30,21 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-function readHeartbeat() {
-  const now = Date.now();
-  const stored = JSON.parse(sessionStorage.getItem("wpacsHeartbeat") || "null");
-  return stored?.loginAt
-    ? stored
-    : { loginAt: now, lastHeartbeatAt: now, lockoutAt: now + 8 * 60 * 60 * 1000 };
+function formatDateTime(value) {
+  return value ? new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value)) : "No event";
 }
 
-function saveHeartbeat() {
-  sessionStorage.setItem("wpacsHeartbeat", JSON.stringify(state.heartbeat));
+function minutesLabel(value) {
+  const minutes = Number(value || 0);
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return hours ? `${hours}h ${String(remainder).padStart(2, "0")}m` : `${remainder}m`;
 }
-
-function formatTime(value) {
-  return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date(value));
-}
-
-function formatDuration(milliseconds) {
-  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return hours > 0
-    ? `${hours}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`
-    : `${minutes}m ${String(seconds).padStart(2, "0")}s`;
-}
-
-function heartbeatStatus() {
-  const now = Date.now();
-  return {
-    loginAt: formatTime(state.heartbeat.loginAt),
-    lastHeartbeatAt: formatTime(state.heartbeat.lastHeartbeatAt),
-    lockoutAt: formatTime(state.heartbeat.lockoutAt),
-    timeToLockout: formatDuration(state.heartbeat.lockoutAt - now),
-    lockedOut: now >= state.heartbeat.lockoutAt
-  };
-}
-
-function updateHeartbeatPanel() {
-  if (!state.user) {
-    return;
-  }
-  state.heartbeat.lastHeartbeatAt = Date.now();
-  saveHeartbeat();
-  const status = heartbeatStatus();
-  document.querySelectorAll("[data-heartbeat-field]").forEach((node) => {
-    node.textContent = status[node.dataset.heartbeatField] || "";
-  });
-  const badge = document.querySelector("[data-heartbeat-status]");
-  if (badge) {
-    badge.textContent = status.lockedOut ? "LOCKOUT DUE" : "HEARTBEAT LIVE";
-    badge.classList.toggle("warning", status.lockedOut);
-  }
-}
-
-window.setInterval(updateHeartbeatPanel, 1000);
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -103,9 +65,9 @@ async function api(path, options = {}) {
 function sidebar() {
   const role = state.user?.role || "";
   const operationItems = [
+    ...(state.user?.employee_id ? [["monitor-dot", "Agent", "#agent"]] : []),
     ["activity", "Productivity", "#productivity"],
-    ["file-bar-chart", "Reports", "#reports"],
-    ...(role === "ADMIN" ? [["shield-alert", "Conflict Management", "#conflicts"]] : [])
+    ["file-bar-chart", "Reports", "#reports"]
   ];
   const groups = [
     { title: "WPACS", items: [["radar", "Dashboard", "#dashboard", true]] },
@@ -182,15 +144,7 @@ function emptyState(text = "No records available.") {
 }
 
 function onboardingState() {
-  return `
-    <div class="empty-state">
-      <strong>Welcome to WPACS.</strong><br>
-      Step 1: Create Employee.<br>
-      Step 2: Assign Manager.<br>
-      Step 3: Mark Attendance.<br>
-      Step 4: View Productivity.
-    </div>
-  `;
+  return emptyState("No PostgreSQL employee records found.");
 }
 
 function loginPage() {
@@ -265,7 +219,6 @@ function managerDashboard() {
   const role = state.user?.role || "";
   const canManageEmployees = role === "ADMIN" || role === "MANAGER";
   const canManageUsers = role === "ADMIN";
-  const canViewConflicts = role === "ADMIN";
   return dashboardShell(`
     <section class="kpi-grid" id="dashboard" aria-label="Manager KPIs">
       ${metricCard("Employees", metrics.employees || 0, "Live employee records", "#employees")}
@@ -274,14 +227,102 @@ function managerDashboard() {
       ${metricCard("Reports", state.reports.length, "Generated reports", "#reports")}
     </section>
     <div class="content-grid">
+      ${state.user?.employee_id ? agentDashboardPanel() : ""}
+      ${role === "MANAGER" || role === "ADMIN" || role === "SUPERVISOR" ? managerLivePanel() : ""}
       ${canManageEmployees ? employeesPanel() : ""}
       ${attendancePanel()}
       ${productivityPanel()}
       ${reportsPanel()}
-      ${canViewConflicts ? conflictPanel() : ""}
       ${canManageUsers ? usersPanel() : ""}
     </div>
   `);
+}
+
+function agentDashboardPanel() {
+  const status = state.agentDashboard?.status || {};
+  const productivity = state.agentDashboard?.productivity || {};
+  const attendance = state.agentDashboard?.attendance || [];
+  const canPostShift = state.user?.role !== "SUPERVISOR";
+  return `
+    <section class="panel wide agent-dashboard-panel" id="agent">
+      <div class="panel-header">
+        <div>
+          <h2>Agent Dashboard</h2>
+          <p>Current shift state from PostgreSQL workstation events.</p>
+        </div>
+        <span class="state">${escapeHtml(status.connection_status || "OFFLINE")}</span>
+      </div>
+      <div class="agent-dashboard-kpis">
+        <article class="agent-kpi-card"><span>Current Status</span><strong>${escapeHtml(status.current_status || "OFFLINE")}</strong></article>
+        <article class="agent-kpi-card"><span>Shift State</span><strong>${escapeHtml(status.shift_state || "NOT_STARTED")}</strong></article>
+        <article class="agent-kpi-card"><span>Today's Attendance</span><strong>${attendance.length ? escapeHtml(attendance[0].status) : "No record"}</strong></article>
+        <article class="agent-kpi-card"><span>Last Heartbeat</span><strong>${formatDateTime(status.last_heartbeat_at)}</strong></article>
+      </div>
+      <div class="agent-shift-actions">
+        <button type="button" data-agent-event="SHIFT_START" ${canPostShift ? "" : "disabled"}>${icon("play")} Start Shift</button>
+        <button type="button" data-agent-event="SHIFT_END" ${canPostShift ? "" : "disabled"}>${icon("square")} End Shift</button>
+        <button type="button" data-agent-event="HEARTBEAT" ${canPostShift ? "" : "disabled"}>${icon("radio")} Heartbeat</button>
+      </div>
+      <div class="agent-dashboard-grid compact">
+        <article class="agent-inner-panel">
+          <span>Connection Status</span>
+          <strong>${escapeHtml(status.connection_status || "OFFLINE")}</strong>
+          <small>Last activity: ${formatDateTime(status.last_activity_at)}</small>
+        </article>
+        <article class="agent-inner-panel">
+          <span>Today's Productive Time</span>
+          <strong>${minutesLabel(productivity.productive_minutes)}</strong>
+          <small>Score: ${escapeHtml(productivity.productivity_score ?? 0)}%</small>
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function managerLivePanel() {
+  const todayByEmployee = new Map(state.dailyProductivity.map((row) => [row.employee_id, row]));
+  return `
+    <section class="panel wide" id="live-monitoring">
+      <div class="panel-header">
+        <div>
+          <h2>Live Monitoring</h2>
+          <p>Scoped employee status and productivity from PostgreSQL.</p>
+        </div>
+      </div>
+      ${state.agentStatuses.length ? `
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Assigned Employee</th>
+                <th>Current Status</th>
+                <th>Last Activity</th>
+                <th>Shift State</th>
+                <th>Productive</th>
+                <th>Non-Productive</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${state.agentStatuses.map((agent) => {
+                const productivity = todayByEmployee.get(agent.employee_id) || {};
+                const nonProductive = Number(productivity.locked_minutes || 0) + Number(productivity.logged_out_minutes || 0);
+                return `
+                  <tr>
+                    <td><strong>${escapeHtml(agent.employee_name)}</strong><br><small>${escapeHtml(agent.employee_id)}</small></td>
+                    <td><span class="state">${escapeHtml(agent.current_status)}</span></td>
+                    <td>${formatDateTime(agent.last_activity_at)}</td>
+                    <td>${escapeHtml(agent.shift_state)}</td>
+                    <td>${minutesLabel(productivity.productive_minutes)}</td>
+                    <td>${minutesLabel(nonProductive)}</td>
+                  </tr>
+                `;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+      ` : emptyState("No assigned employee status records found.")}
+    </section>
+  `;
 }
 
 function employeesPanel() {
@@ -452,20 +493,6 @@ function reportsPanel() {
   `;
 }
 
-function conflictPanel() {
-  return `
-    <section class="panel wide" id="conflicts">
-      <div class="panel-header">
-        <div>
-          <h2>Conflict Management</h2>
-          <p>V1 conflict records from production data.</p>
-        </div>
-      </div>
-      ${emptyState("No conflict records found.")}
-    </section>
-  `;
-}
-
 function usersPanel() {
   return `
     <section class="panel wide" id="users">
@@ -509,27 +536,6 @@ function usersPanel() {
   `;
 }
 
-function heartbeatCard() {
-  const heartbeat = heartbeatStatus();
-  return `
-    <section class="session-heartbeat-card" aria-label="System login heartbeat and lockout status">
-      <div class="heartbeat-title">
-        <div>
-          <span>System Session Heartbeat</span>
-          <strong>Login and lockout monitor</strong>
-        </div>
-        <em class="heartbeat-live-pill" data-heartbeat-status>${heartbeat.lockedOut ? "LOCKOUT DUE" : "HEARTBEAT LIVE"}</em>
-      </div>
-      <div class="heartbeat-grid">
-        <div><span>System Login</span><strong data-heartbeat-field="loginAt">${heartbeat.loginAt}</strong></div>
-        <div><span>Last Heartbeat</span><strong data-heartbeat-field="lastHeartbeatAt">${heartbeat.lastHeartbeatAt}</strong></div>
-        <div><span>Lockout Time</span><strong data-heartbeat-field="lockoutAt">${heartbeat.lockoutAt}</strong></div>
-        <div><span>Time to Lockout</span><strong data-heartbeat-field="timeToLockout">${heartbeat.timeToLockout}</strong></div>
-      </div>
-    </section>
-  `;
-}
-
 function render() {
   document.querySelector("#app").innerHTML = state.loading
     ? `<main class="login-page"><section class="login-panel-shell"><div class="login-panel">Loading WPACS...</div></section></main>`
@@ -558,9 +564,6 @@ function attachHandlers() {
             role: formData.get("role")
           })
         });
-        const now = Date.now();
-        state.heartbeat = { loginAt: now, lastHeartbeatAt: now, lockoutAt: now + 8 * 60 * 60 * 1000 };
-        saveHeartbeat();
         await loadData();
       } catch (error) {
         result.textContent = error.message;
@@ -572,7 +575,7 @@ function attachHandlers() {
   if (logoutButton) {
     logoutButton.addEventListener("click", async () => {
       await api("/api/v1/auth/logout", { method: "POST" }).catch(() => {});
-      sessionStorage.removeItem("wpacsHeartbeat");
+      closeLiveSocket();
       state.user = null;
       render();
     });
@@ -662,6 +665,21 @@ function attachHandlers() {
     });
   }
 
+  document.querySelectorAll("[data-agent-event]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await api("/api/v2/events", {
+        method: "POST",
+        body: JSON.stringify({
+          employee_id: state.user?.employee_id,
+          event_type: button.dataset.agentEvent,
+          event_timestamp: new Date().toISOString(),
+          source: "web"
+        })
+      });
+      await loadData();
+    });
+  });
+
   const userForm = document.querySelector("#userForm");
   if (userForm) {
     userForm.addEventListener("submit", async (event) => {
@@ -682,7 +700,36 @@ function attachHandlers() {
   }
 }
 
-async function loadData() {
+function closeLiveSocket() {
+  if (state.liveSocket) {
+    state.liveSocket.onclose = null;
+    state.liveSocket.close();
+    state.liveSocket = null;
+  }
+}
+
+function connectLiveSocket() {
+  if (!state.user || state.liveSocket) {
+    return;
+  }
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const socket = new WebSocket(`${protocol}//${window.location.host}/api/v2/live`);
+  state.liveSocket = socket;
+  socket.onmessage = async (event) => {
+    const message = JSON.parse(event.data || "{}");
+    if (["agent_status", "attendance", "productivity"].includes(message.type)) {
+      await loadData({ keepSocket: true });
+    }
+  };
+  socket.onclose = () => {
+    state.liveSocket = null;
+    if (state.user) {
+      window.setTimeout(connectLiveSocket, 3000);
+    }
+  };
+}
+
+async function loadData(options = {}) {
   state.error = "";
   try {
     const role = state.user?.role || "";
@@ -695,6 +742,12 @@ async function loadData() {
     state.reports = await api("/api/v1/reports");
     state.roles = role === "ADMIN" ? await api("/api/v1/roles") : [];
     state.users = role === "ADMIN" ? await api("/api/v1/users") : [];
+    state.agentStatuses = await api("/api/v2/agent-status");
+    state.dailyProductivity = await api(`/api/v2/productivity?date=${new Date().toISOString().slice(0, 10)}`);
+    state.agentDashboard = state.user?.employee_id ? await api("/api/v2/agent-dashboard") : null;
+    if (!options.keepSocket) {
+      connectLiveSocket();
+    }
   } catch (error) {
     state.error = error.message;
   } finally {
