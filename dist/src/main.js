@@ -13,20 +13,6 @@ const state = {
   heartbeat: readHeartbeat()
 };
 
-const appSurface = getAppSurface();
-
-function getAppSurface() {
-  const hostname = window.location.hostname.toLowerCase();
-  if (hostname === "agent.wpacs.com" || window.location.port === "4191") {
-    return "agent";
-  }
-  return "manager";
-}
-
-function isAgentSurface() {
-  return appSurface === "agent";
-}
-
 function icon(name) {
   return `<i data-lucide="${name}" aria-hidden="true"></i>`;
 }
@@ -113,16 +99,17 @@ async function api(path, options = {}) {
 }
 
 function sidebar() {
-  const groups = isAgentSurface()
-    ? [{ title: "WPACS Agent", items: [["monitor-dot", "Agent Dashboard", "#agent-dashboard", true]] }]
-    : [
-        { title: "WPACS Manager", items: [["radar", "Manager Dashboard", "#manager-dashboard", true]] },
-        { title: "Workforce", items: [["users", "Employees", "#employees"], ["calendar-check", "Attendance", "#attendance"]] },
-        { title: "Operations", items: [["activity", "Productivity", "#productivity"], ["file-bar-chart", "Reports", "#reports"]] },
-        ...(state.user?.role_name === "Admin"
-          ? [{ title: "Administration", items: [["user-cog", "Users", "#users"]] }]
-          : [])
-      ];
+  const role = state.user?.role || "";
+  const groups = [
+    { title: "WPACS", items: [["radar", "Dashboard", "#dashboard", true]] },
+    ...(role === "ADMIN" || role === "MANAGER"
+      ? [{ title: "Workforce", items: [["users", "Employees", "#employees"], ["calendar-check", "Attendance", "#attendance"]] }]
+      : [{ title: "Workforce", items: [["calendar-check", "Attendance", "#attendance"]] }]),
+    { title: "Operations", items: [["activity", "Productivity", "#productivity"], ["file-bar-chart", "Reports", "#reports"], ["shield-alert", "Conflict Management", "#conflicts"]] },
+    ...(role === "ADMIN"
+      ? [{ title: "Administration", items: [["user-cog", "Users", "#users"]] }]
+      : [])
+  ];
 
   return `
     <aside class="sidebar" aria-label="Main navigation">
@@ -130,7 +117,7 @@ function sidebar() {
         <div class="brand-mark">W</div>
         <div>
           <strong>WPACS</strong>
-          <span>${isAgentSurface() ? "Agent dashboard" : "Manager dashboard"}</span>
+          <span>RBAC dashboard</span>
         </div>
       </div>
       <nav class="nav-list">
@@ -154,11 +141,11 @@ function topbar() {
   return `
     <header class="topbar">
       <div>
-        <p class="eyebrow">${isAgentSurface() ? "Agent" : "Manager"}</p>
-        <h1>${isAgentSurface() ? "WPACS Agent Dashboard" : "WPACS Manager Dashboard"}</h1>
+        <p class="eyebrow">${escapeHtml(state.user?.role || "WPACS")}</p>
+        <h1>WPACS Manager Dashboard</h1>
       </div>
       <div class="topbar-actions">
-        <span class="session-role">${escapeHtml(state.user?.role_name || "")}</span>
+        <span class="session-role">${escapeHtml(state.user?.role || "")}</span>
         <button class="text-button" id="logoutButton" type="button">${icon("log-out")} Logout</button>
       </div>
     </header>
@@ -199,7 +186,7 @@ function loginPage() {
         <div class="identity-message">
           <p class="eyebrow">Identity Gateway</p>
           <h1>Secure access for WPACS V1.</h1>
-          <p>Sign in to open ${isAgentSurface() ? "agent" : "manager"} dashboard data.</p>
+          <p>Sign in to open manager dashboard data.</p>
         </div>
       </section>
       <section class="login-panel-shell" aria-label="Login form">
@@ -242,19 +229,23 @@ function dashboardShell(content) {
 
 function managerDashboard() {
   const metrics = state.dashboard.metrics || {};
+  const role = state.user?.role || "";
+  const canManageEmployees = role === "ADMIN" || role === "MANAGER";
+  const canManageUsers = role === "ADMIN";
   return dashboardShell(`
-    <section class="kpi-grid" aria-label="Manager KPIs">
+    <section class="kpi-grid" id="dashboard" aria-label="Manager KPIs">
       ${metricCard("Employees", metrics.employees || 0, "Live employee records", "#employees")}
       ${metricCard("Productivity Score", `${metrics.productivity_score || 0}%`, "Average productivity", "#productivity")}
       ${metricCard("Attendance Records", metrics.attendance_records || 0, "Attendance rows", "#attendance")}
       ${metricCard("Reports", state.reports.length, "Generated reports", "#reports")}
     </section>
     <div class="content-grid">
-      ${employeesPanel()}
+      ${canManageEmployees ? employeesPanel() : ""}
       ${attendancePanel()}
       ${productivityPanel()}
       ${reportsPanel()}
-      ${state.user?.role_name === "Admin" ? usersPanel() : ""}
+      ${conflictPanel()}
+      ${canManageUsers ? usersPanel() : ""}
     </div>
   `);
 }
@@ -398,18 +389,32 @@ function reportsPanel() {
   `;
 }
 
+function conflictPanel() {
+  return `
+    <section class="panel wide" id="conflicts">
+      <div class="panel-header">
+        <div>
+          <h2>Conflict Management</h2>
+          <p>V1 conflict records from production data.</p>
+        </div>
+      </div>
+      ${emptyState("No conflict records found.")}
+    </section>
+  `;
+}
+
 function usersPanel() {
   return `
     <section class="panel wide" id="users">
       <div class="panel-header">
         <div>
           <h2>Users</h2>
-          <p>Admin account creation and access management.</p>
+          <p>Admin-only create, edit, disable, reset password, and assign role.</p>
         </div>
       </div>
       <form class="employee-form" id="userForm">
         <input name="username" required aria-label="Username">
-        <input name="password" type="password" required aria-label="Password">
+        <input name="password" type="password" aria-label="New or reset password">
         <select name="role_name" required aria-label="Role">
           ${state.roles.map((role) => `<option value="${escapeHtml(role.role_name)}">${escapeHtml(role.role_name)}</option>`).join("")}
         </select>
@@ -462,52 +467,11 @@ function heartbeatCard() {
   `;
 }
 
-function agentDashboard() {
-  const profile = state.agentProfile || {};
-  const latestProductivity = state.productivity[0];
-  const latestAttendance = state.attendance[0];
-  return dashboardShell(`
-    <div class="content-grid page-content">
-      <section class="panel wide agent-dashboard-panel" id="agent-dashboard">
-        <div class="panel-header">
-          <div>
-            <h2>Agent Dashboard</h2>
-            <p>Personal WPACS profile, attendance, productivity, and daily summary.</p>
-          </div>
-          <span class="status-pill healthy">${escapeHtml(profile.status || "ACTIVE")}</span>
-        </div>
-        ${profile.employee_id ? `
-          <div class="agent-dashboard-hero">
-            <div>
-              <span>Agent Name</span>
-              <strong>${escapeHtml(profile.employee_name)}</strong>
-              <small>${escapeHtml(profile.employee_id)}</small>
-            </div>
-            <div class="agent-score-card">
-              <span>Productivity Score</span>
-              <strong>${escapeHtml(latestProductivity?.productivity_score ?? 0)}%</strong>
-            </div>
-            <div class="agent-hero-meta">
-              <div><span>Department</span><strong>${escapeHtml(profile.department)}</strong></div>
-              <div><span>Attendance</span><strong>${escapeHtml(latestAttendance?.status || "No record")}</strong></div>
-            </div>
-          </div>
-          ${heartbeatCard()}
-          <div class="agent-dashboard-grid">
-            ${attendancePanel(state.attendance)}
-            ${productivityPanel(state.productivity)}
-          </div>
-        ` : emptyState()}
-      </section>
-    </div>
-  `);
-}
-
 function render() {
   document.querySelector("#app").innerHTML = state.loading
     ? `<main class="login-page"><section class="login-panel-shell"><div class="login-panel">Loading WPACS...</div></section></main>`
     : state.user
-      ? (isAgentSurface() ? agentDashboard() : managerDashboard())
+      ? managerDashboard()
       : loginPage();
   if (window.lucide) {
     window.lucide.createIcons();
@@ -608,20 +572,14 @@ function attachHandlers() {
 async function loadData() {
   state.error = "";
   try {
-    if (isAgentSurface()) {
-      state.agentProfile = await api("/agent/v1/profile");
-      const employeeId = encodeURIComponent(state.agentProfile.employee_id || "");
-      state.attendance = employeeId ? await api(`/api/v1/attendance?employee_id=${employeeId}`) : [];
-      state.productivity = employeeId ? await api(`/api/v1/productivity?employee_id=${employeeId}`) : [];
-    } else {
-      state.dashboard = await api("/api/v1/dashboard");
-      state.employees = await api("/api/v1/employees");
-      state.attendance = await api("/api/v1/attendance");
-      state.productivity = await api("/api/v1/productivity");
-      state.reports = await api("/api/v1/reports");
-      state.roles = await api("/api/v1/roles");
-      state.users = state.user?.role_name === "Admin" ? await api("/api/v1/users") : [];
-    }
+    const role = state.user?.role || "";
+    state.dashboard = await api("/api/v1/dashboard");
+    state.employees = role === "ADMIN" || role === "MANAGER" ? await api("/api/v1/employees") : [];
+    state.attendance = await api("/api/v1/attendance");
+    state.productivity = await api("/api/v1/productivity");
+    state.reports = await api("/api/v1/reports");
+    state.roles = role === "ADMIN" ? await api("/api/v1/roles") : [];
+    state.users = role === "ADMIN" ? await api("/api/v1/users") : [];
   } catch (error) {
     state.error = error.message;
   } finally {

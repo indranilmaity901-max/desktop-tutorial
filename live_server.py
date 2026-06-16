@@ -20,6 +20,11 @@ except ImportError:  # pragma: no cover - surfaced through /health when dependen
 ROOT = Path(__file__).resolve().parent
 SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "28800"))
 SESSIONS = {}
+RBAC_ROLES = ("ADMIN", "MANAGER", "SUPERVISOR")
+
+
+def normalize_role(role_name):
+    return str(role_name or "").strip().upper()
 
 
 def database_url():
@@ -116,7 +121,9 @@ def require_roles(handler, *roles):
     if not session:
         handler.send_json(401, response(False, message="Authentication required"))
         return None
-    if roles and session["user"]["role_name"] not in roles:
+    allowed_roles = {normalize_role(role) for role in roles}
+    user_role = normalize_role(session["user"].get("role"))
+    if allowed_roles and user_role not in allowed_roles:
         handler.send_json(403, response(False, message="Access denied"))
         return None
     return session
@@ -194,7 +201,7 @@ class Handler(SimpleHTTPRequestHandler):
             password = str(payload.get("password_hash", ""))
             user = query_one(
                 """
-                SELECT u.user_id, u.username, u.password_hash, u.active, u.employee_id, r.role_name
+                SELECT u.user_id, u.username, u.password_hash, u.active, u.employee_id, UPPER(r.role_name) AS role
                 FROM users u
                 JOIN roles r ON r.role_id = u.role_id
                 WHERE u.username = %s
@@ -225,15 +232,15 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             return
 
-        session = require_roles(self, "Admin", "Manager", "Supervisor", "Agent")
+        session = require_roles(self, "ADMIN", "MANAGER", "SUPERVISOR")
         if not session:
             return
 
         if parsed.path == "/api/v1/attendance":
             payload = self.read_json()
-            employee_id = payload.get("employee_id") or employee_scope(session)
-            if session["user"]["role_name"] == "Agent" and employee_id != employee_scope(session):
-                self.send_json(403, response(False, message="Access denied"))
+            employee_id = payload.get("employee_id")
+            if not employee_id:
+                self.send_json(400, response(False, message="Employee ID is required"))
                 return
             execute(
                 """
@@ -246,7 +253,7 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/v1/employees":
-            session = require_roles(self, "Admin", "Manager", "Supervisor")
+            session = require_roles(self, "ADMIN", "MANAGER")
             if not session:
                 return
             payload = self.read_json()
@@ -268,13 +275,13 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/v1/productivity":
-            session = require_roles(self, "Admin", "Manager", "Supervisor", "Agent")
+            session = require_roles(self, "ADMIN", "MANAGER", "SUPERVISOR")
             if not session:
                 return
             payload = self.read_json()
-            employee_id = payload.get("employee_id") or employee_scope(session)
-            if session["user"]["role_name"] == "Agent" and employee_id != employee_scope(session):
-                self.send_json(403, response(False, message="Access denied"))
+            employee_id = payload.get("employee_id")
+            if not employee_id:
+                self.send_json(400, response(False, message="Employee ID is required"))
                 return
             productivity = query_one(
                 """
@@ -300,21 +307,29 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/v1/users":
-            session = require_roles(self, "Admin")
+            session = require_roles(self, "ADMIN")
             if not session:
                 return
             payload = self.read_json()
             username = str(payload.get("username", "")).strip()
             password = str(payload.get("password", ""))
-            role_name = str(payload.get("role_name", "")).strip()
+            role_name = normalize_role(payload.get("role_name", ""))
             employee_id = payload.get("employee_id") or None
-            if not username or not password or not role_name:
-                self.send_json(400, response(False, message="Username, password, and role are required"))
+            if not username or not role_name:
+                self.send_json(400, response(False, message="Username and role are required"))
                 return
-            role = query_one("SELECT role_id FROM roles WHERE role_name = %s", (role_name,))
+            if role_name not in RBAC_ROLES:
+                self.send_json(400, response(False, message="Invalid role"))
+                return
+            role = query_one("SELECT role_id FROM roles WHERE UPPER(role_name) = %s", (role_name,))
             if not role:
                 self.send_json(400, response(False, message="Invalid role"))
                 return
+            existing_user = query_one("SELECT password_hash FROM users WHERE username = %s", (username,))
+            if not password and not existing_user:
+                self.send_json(400, response(False, message="Password is required for new users"))
+                return
+            password_hash = hash_password(password) if password else existing_user["password_hash"]
             user = query_one(
                 """
                 INSERT INTO users (username, password_hash, role_id, employee_id, active)
@@ -326,13 +341,13 @@ class Handler(SimpleHTTPRequestHandler):
                   active = EXCLUDED.active
                 RETURNING user_id, username, role_id, employee_id, active
                 """,
-                (username, hash_password(password), role["role_id"], employee_id, normalize_bool(payload.get("active", True))),
+                (username, password_hash, role["role_id"], employee_id, normalize_bool(payload.get("active", True))),
             )
             self.send_json(201, response(True, user, "User account saved"))
             return
 
         if parsed.path == "/api/v1/reports":
-            session = require_roles(self, "Admin", "Manager", "Supervisor")
+            session = require_roles(self, "ADMIN", "MANAGER", "SUPERVISOR")
             if not session:
                 return
             payload = self.read_json()
@@ -369,13 +384,13 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/live-dashboard" or parsed.path == "/api/v1/dashboard":
-            if not require_roles(self, "Admin", "Manager", "Supervisor"):
+            if not require_roles(self, "ADMIN", "MANAGER", "SUPERVISOR"):
                 return
             self.send_json(200, response(True, dashboard_payload()))
             return
 
         if parsed.path == "/api/v1/employees":
-            session = require_roles(self, "Admin", "Manager", "Supervisor")
+            session = require_roles(self, "ADMIN", "MANAGER")
             if not session:
                 return
             self.send_json(200, response(True, query(
@@ -388,21 +403,22 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/v1/roles":
-            session = require_roles(self, "Admin", "Manager", "Supervisor")
+            session = require_roles(self, "ADMIN")
             if not session:
                 return
             self.send_json(200, response(True, query(
-                "SELECT role_id, role_name FROM roles ORDER BY role_name"
+                "SELECT role_id, UPPER(role_name) AS role_name FROM roles WHERE UPPER(role_name) = ANY(%s) ORDER BY role_name",
+                (list(RBAC_ROLES),),
             )))
             return
 
         if parsed.path == "/api/v1/users":
-            session = require_roles(self, "Admin")
+            session = require_roles(self, "ADMIN")
             if not session:
                 return
             self.send_json(200, response(True, query(
                 """
-                SELECT u.user_id, u.username, r.role_name, u.employee_id, u.active
+                SELECT u.user_id, u.username, UPPER(r.role_name) AS role_name, u.employee_id, u.active
                 FROM users u
                 JOIN roles r ON r.role_id = u.role_id
                 ORDER BY u.user_id DESC
@@ -411,13 +427,11 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/v1/attendance":
-            session = require_roles(self, "Admin", "Manager", "Supervisor", "Agent")
+            session = require_roles(self, "ADMIN", "MANAGER", "SUPERVISOR")
             if not session:
                 return
             params = urllib.parse.parse_qs(parsed.query)
             employee_id = params.get("employee_id", [None])[0]
-            if session["user"]["role_name"] == "Agent":
-                employee_id = employee_scope(session)
             if employee_id:
                 data = query(
                     """
@@ -440,13 +454,11 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/v1/productivity":
-            session = require_roles(self, "Admin", "Manager", "Supervisor", "Agent")
+            session = require_roles(self, "ADMIN", "MANAGER", "SUPERVISOR")
             if not session:
                 return
             params = urllib.parse.parse_qs(parsed.query)
             employee_id = params.get("employee_id", [None])[0]
-            if session["user"]["role_name"] == "Agent":
-                employee_id = employee_scope(session)
             if employee_id:
                 data = query(
                     """
@@ -469,7 +481,7 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/v1/reports":
-            if not require_roles(self, "Admin", "Manager", "Supervisor"):
+            if not require_roles(self, "ADMIN", "MANAGER", "SUPERVISOR"):
                 return
             self.send_json(200, response(True, query(
                 """
@@ -478,22 +490,6 @@ class Handler(SimpleHTTPRequestHandler):
                 ORDER BY generated_at DESC
                 """
             )))
-            return
-
-        if parsed.path == "/agent/v1/profile":
-            session = require_roles(self, "Agent")
-            if not session:
-                return
-            employee_id = employee_scope(session)
-            employee = query_one(
-                """
-                SELECT employee_id, employee_name, department, manager_id, status, created_at
-                FROM employees
-                WHERE employee_id = %s
-                """,
-                (employee_id,),
-            )
-            self.send_json(200, response(True, employee or {}))
             return
 
         return super().do_GET()

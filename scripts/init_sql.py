@@ -50,7 +50,36 @@ with psycopg.connect(DATABASE_URL) as connection:
         cursor.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()")
         cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS employee_id TEXT REFERENCES employees(employee_id)")
         cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()")
-        for role_name in ("Admin", "Manager", "Supervisor", "Agent"):
+        cursor.execute(
+            """
+            WITH canonical_roles AS (
+              SELECT UPPER(role_name) AS role_key, MIN(role_id) AS keep_role_id
+              FROM roles
+              GROUP BY UPPER(role_name)
+            )
+            UPDATE users
+            SET role_id = canonical_roles.keep_role_id
+            FROM roles, canonical_roles
+            WHERE users.role_id = roles.role_id
+              AND UPPER(roles.role_name) = canonical_roles.role_key
+              AND users.role_id <> canonical_roles.keep_role_id
+            """
+        )
+        cursor.execute(
+            """
+            WITH canonical_roles AS (
+              SELECT UPPER(role_name) AS role_key, MIN(role_id) AS keep_role_id
+              FROM roles
+              GROUP BY UPPER(role_name)
+            )
+            DELETE FROM roles
+            USING canonical_roles
+            WHERE UPPER(roles.role_name) = canonical_roles.role_key
+              AND roles.role_id <> canonical_roles.keep_role_id
+            """
+        )
+        cursor.execute("UPDATE roles SET role_name = UPPER(role_name)")
+        for role_name in ("ADMIN", "MANAGER", "SUPERVISOR"):
             cursor.execute(
                 "INSERT INTO roles (role_name) VALUES (%s) ON CONFLICT (role_name) DO NOTHING",
                 (role_name,),
@@ -59,7 +88,7 @@ with psycopg.connect(DATABASE_URL) as connection:
         admin_username = os.environ.get("WPACS_ADMIN_USERNAME")
         admin_password = os.environ.get("WPACS_ADMIN_PASSWORD")
         if admin_username and admin_password:
-            cursor.execute("SELECT role_id FROM roles WHERE role_name = 'Admin'")
+            cursor.execute("SELECT role_id FROM roles WHERE role_name = 'ADMIN'")
             role_id = cursor.fetchone()[0]
             cursor.execute(
                 """
