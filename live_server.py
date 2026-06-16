@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parent
 SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "28800"))
 SESSIONS = {}
 RBAC_ROLES = ("ADMIN", "MANAGER", "SUPERVISOR")
-EVENT_TYPES = ("LOGIN", "LOGOUT", "LOCK", "UNLOCK", "HEARTBEAT", "SHIFT_START", "SHIFT_END")
+EVENT_TYPES = ("LOGIN", "LOGOUT", "LOGOFF", "LOCK", "UNLOCK", "HEARTBEAT", "SHIFT_START", "SHIFT_END")
 WEBSOCKET_CLIENTS = set()
 WEBSOCKET_LOCK = threading.Lock()
 
@@ -85,6 +85,7 @@ def audit_action_for_event(event_type):
         "SHIFT_END": "Shift Ended",
         "LOGIN": "Status Changed",
         "LOGOUT": "Status Changed",
+        "LOGOFF": "Status Changed",
         "LOCK": "Status Changed",
         "UNLOCK": "Status Changed",
         "HEARTBEAT": "Status Changed",
@@ -180,49 +181,33 @@ def calculate_productivity_for_day(employee_id, target_date):
     shift_start = None
     shift_end = None
     locked_minutes = 0
-    logged_out_minutes = 0
     open_lock = None
-    open_logout = None
-    last_login = None
 
     for event in events:
         event_type = event["event_type"]
         timestamp = event["event_timestamp"]
         if event_type == "SHIFT_START":
             shift_start = timestamp
-            open_logout = None
         elif event_type == "SHIFT_END":
             shift_end = timestamp
             if open_lock:
                 locked_minutes += minutes_between(open_lock, timestamp)
                 open_lock = None
-            if open_logout:
-                logged_out_minutes += minutes_between(open_logout, timestamp)
-                open_logout = None
         elif event_type == "LOCK" and shift_start and not shift_end and not open_lock:
             open_lock = timestamp
         elif event_type == "UNLOCK" and open_lock:
             locked_minutes += minutes_between(open_lock, timestamp)
             open_lock = None
-        elif event_type == "LOGOUT" and shift_start and not shift_end and not open_logout:
-            open_logout = timestamp
-        elif event_type == "LOGIN":
-            last_login = timestamp
-            if open_logout:
-                logged_out_minutes += minutes_between(open_logout, timestamp)
-                open_logout = None
 
     if not shift_start:
         productive_minutes = 0
         total_shift_minutes = 0
     else:
-        effective_end = shift_end or last_login or datetime.now(timezone.utc)
+        effective_end = shift_end or datetime.now(timezone.utc)
         if open_lock:
             locked_minutes += minutes_between(open_lock, effective_end)
-        if open_logout:
-            logged_out_minutes += minutes_between(open_logout, effective_end)
         total_shift_minutes = minutes_between(shift_start, effective_end)
-        productive_minutes = max(0, total_shift_minutes - locked_minutes - logged_out_minutes)
+        productive_minutes = max(0, total_shift_minutes - locked_minutes)
 
     productivity_score = round((productive_minutes / total_shift_minutes) * 100, 2) if total_shift_minutes else 0
     row = query_one(
@@ -245,7 +230,7 @@ def calculate_productivity_for_day(employee_id, target_date):
           updated_at = NOW()
         RETURNING employee_id, date, productive_minutes, locked_minutes, logged_out_minutes, productivity_score, updated_at
         """,
-        (employee_id, target_date, productive_minutes, locked_minutes, logged_out_minutes, productivity_score),
+        (employee_id, target_date, productive_minutes, locked_minutes, 0, productivity_score),
     )
     return row
 

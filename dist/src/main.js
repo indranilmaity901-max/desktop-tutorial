@@ -294,26 +294,27 @@ function managerLivePanel() {
           <table>
             <thead>
               <tr>
-                <th>Assigned Employee</th>
-                <th>Current Status</th>
-                <th>Last Activity</th>
-                <th>Shift State</th>
-                <th>Productive</th>
-                <th>Non-Productive</th>
+                <th>Agent Name</th>
+                <th>Current State</th>
+                <th>Online/Offline</th>
+                <th>Last Heartbeat</th>
+                <th>Locked Duration</th>
+                <th>Productive Duration</th>
+                <th>Productivity</th>
               </tr>
             </thead>
             <tbody>
               ${state.agentStatuses.map((agent) => {
                 const productivity = todayByEmployee.get(agent.employee_id) || {};
-                const nonProductive = Number(productivity.locked_minutes || 0) + Number(productivity.logged_out_minutes || 0);
                 return `
                   <tr>
                     <td><strong>${escapeHtml(agent.employee_name)}</strong><br><small>${escapeHtml(agent.employee_id)}</small></td>
                     <td><span class="state">${escapeHtml(agent.current_status)}</span></td>
-                    <td>${formatDateTime(agent.last_activity_at)}</td>
-                    <td>${escapeHtml(agent.shift_state)}</td>
+                    <td>${escapeHtml(agent.connection_status)}</td>
+                    <td>${formatDateTime(agent.last_heartbeat_at)}</td>
+                    <td>${minutesLabel(productivity.locked_minutes)}</td>
                     <td>${minutesLabel(productivity.productive_minutes)}</td>
-                    <td>${minutesLabel(nonProductive)}</td>
+                    <td><strong>${escapeHtml(productivity.productivity_score ?? 0)}%</strong></td>
                   </tr>
                 `;
               }).join("")}

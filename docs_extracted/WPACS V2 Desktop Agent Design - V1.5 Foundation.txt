@@ -1,26 +1,28 @@
-WPACS V2 Desktop Agent Design - V1.5 Foundation
+WPACS V2 Desktop Agent Implementation Notes
 
-Status: design only. Do not implement in V1.5.
+Status: V2 Windows Desktop Agent implemented as a lightweight Python background process in agent/windows_agent.py.
 
 Purpose
-The future WPACS Desktop Agent will submit workstation state events to the existing V1.5 event API. It must only report approved operational state transitions needed for attendance, agent status, and productivity calculations.
+The WPACS Desktop Agent submits Windows workstation state events to the WPACS API. It only reports approved operational state transitions needed for attendance, agent status, and productivity calculations.
 
-Supported future events
+Supported events
+SHIFT_START
+SHIFT_END
 LOCK
 UNLOCK
 LOGIN
-LOGOUT
+LOGOFF
 HEARTBEAT
 
 Event contract
-Each agent event must map to the existing workstation_events table and POST /api/v2/events contract:
+Each agent event maps to the workstation_events table through the POST /api/v2/events contract:
 employee_id
 event_type
 event_timestamp
 source
 
 Security boundaries
-The desktop agent must authenticate through a production identity mechanism before event submission.
+The desktop agent authenticates against the WPACS API before event submission.
 The backend remains the system of record for RBAC, audit logging, productivity calculation, and manager visibility.
 Managers may only view employees assigned to them.
 Supervisors remain read-only and limited to assigned operational scope.
@@ -33,7 +35,7 @@ The desktop agent must not collect browser history, application titles, document
 The desktop agent must not implement surveillance features.
 
 V1.5 dependency
-The desktop agent depends on the V1.5 event foundation:
+The desktop agent uses the event foundation:
 agent_status
 workstation_events
 productivity_daily
