@@ -11,6 +11,7 @@ class AgentConfig:
     employee_id: str
     source: str = "windows_desktop_agent"
     heartbeat_seconds: int = 30
+    idle_seconds: int = 300
 
 
 def load_config() -> AgentConfig:
@@ -29,4 +30,5 @@ def load_config() -> AgentConfig:
         employee_id=os.environ["WPACS_AGENT_EMPLOYEE_ID"],
         source=os.environ.get("WPACS_AGENT_SOURCE", "windows_desktop_agent"),
         heartbeat_seconds=int(os.environ.get("WPACS_HEARTBEAT_SECONDS", "30")),
+        idle_seconds=int(os.environ.get("WPACS_IDLE_SECONDS", "300")),
     )

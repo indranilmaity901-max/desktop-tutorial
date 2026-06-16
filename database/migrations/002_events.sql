@@ -10,13 +10,13 @@ CREATE TABLE IF NOT EXISTS agent_status (
   CHECK (current_status IN ('OFFLINE', 'ONLINE', 'LOCKED')),
   CHECK (shift_state IN ('NOT_STARTED', 'ACTIVE', 'ENDED')),
   CHECK (connection_status IN ('OFFLINE', 'ONLINE')),
-  CHECK (last_event_type IS NULL OR last_event_type IN ('LOGIN', 'LOGOUT', 'LOGOFF', 'LOCK', 'UNLOCK', 'HEARTBEAT', 'SHIFT_START', 'SHIFT_END'))
+  CHECK (last_event_type IS NULL OR last_event_type IN ('LOGIN', 'LOGOUT', 'LOGOFF', 'LOCK', 'UNLOCK', 'IDLE', 'HEARTBEAT', 'SHIFT_START', 'SHIFT_END'))
 );
 
 CREATE TABLE IF NOT EXISTS workstation_events (
   id BIGSERIAL PRIMARY KEY,
   employee_id TEXT NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
-  event_type TEXT NOT NULL CHECK (event_type IN ('LOGIN', 'LOGOUT', 'LOGOFF', 'LOCK', 'UNLOCK', 'HEARTBEAT', 'SHIFT_START', 'SHIFT_END')),
+  event_type TEXT NOT NULL CHECK (event_type IN ('LOGIN', 'LOGOUT', 'LOGOFF', 'LOCK', 'UNLOCK', 'IDLE', 'HEARTBEAT', 'SHIFT_START', 'SHIFT_END')),
   event_timestamp TIMESTAMPTZ NOT NULL,
   source TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

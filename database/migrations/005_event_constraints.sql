@@ -1,5 +1,3 @@
-BEGIN;
-
 ALTER TABLE agent_status
   DROP CONSTRAINT IF EXISTS agent_status_last_event_type_check;
 
@@ -16,5 +14,3 @@ ALTER TABLE workstation_events
 ALTER TABLE workstation_events
   ADD CONSTRAINT workstation_events_event_type_check
   CHECK (event_type IN ('LOGIN', 'LOGOUT', 'LOGOFF', 'LOCK', 'UNLOCK', 'IDLE', 'HEARTBEAT', 'SHIFT_START', 'SHIFT_END'));
-
-COMMIT;

@@ -42,13 +42,13 @@ class EventSender:
         )
         self.token = payload["data"]["access_token"]
 
-    def send(self, event_type):
+    def send(self, event_type, event_timestamp=None):
         return self._request(
             "/api/v2/events",
             {
                 "employee_id": self.config.employee_id,
                 "event_type": event_type,
-                "event_timestamp": datetime.now(timezone.utc).isoformat(),
+                "event_timestamp": event_timestamp or datetime.now(timezone.utc).isoformat(),
                 "source": self.config.source,
             },
         )

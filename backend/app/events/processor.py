@@ -4,7 +4,7 @@ from app.database import query_one
 from app.productivity.engine import calculate_daily
 
 
-EVENT_TYPES = {"SHIFT_START", "SHIFT_END", "LOCK", "UNLOCK", "LOGIN", "LOGOFF", "LOGOUT", "HEARTBEAT"}
+EVENT_TYPES = {"SHIFT_START", "SHIFT_END", "LOCK", "UNLOCK", "IDLE", "LOGIN", "LOGOFF", "LOGOUT", "HEARTBEAT"}
 
 
 def parse_timestamp(value):
@@ -21,6 +21,8 @@ def derive_status(event_type: str):
     if event_type == "LOCK":
         return "LOCKED", "ONLINE"
     if event_type in {"SHIFT_START", "UNLOCK", "LOGIN", "HEARTBEAT"}:
+        return "ONLINE", "ONLINE"
+    if event_type == "IDLE":
         return "ONLINE", "ONLINE"
     return "OFFLINE", "OFFLINE"
 

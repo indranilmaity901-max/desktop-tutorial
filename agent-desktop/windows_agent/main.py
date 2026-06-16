@@ -18,7 +18,12 @@ class WindowsAgent:
         self.config = load_config()
         self.sender = EventSender(self.config)
         self.queue = OfflineQueue()
-        self.heartbeat = Heartbeat(self.sender, self.queue, self.config.heartbeat_seconds)
+        self.heartbeat = Heartbeat(
+            self.sender,
+            self.queue,
+            self.config.heartbeat_seconds,
+            self.config.idle_seconds,
+        )
         self.detector = LockDetector(self.handle_event)
         self.shift_started = False
         self.authenticated = False
@@ -36,14 +41,20 @@ class WindowsAgent:
             self.shift_started = False
         self.send(event_type)
 
-    def start(self):
+    def _start_common(self):
         self.sender.authenticate()
         self.authenticated = True
         self.send("LOGIN")
         self.send("SHIFT_START")
         self.shift_started = True
         self.heartbeat.start()
+
+    def start(self):
+        self._start_common()
         self.detector.run()
+
+    def start_background(self):
+        self._start_common()
 
     def stop(self):
         self.heartbeat.stop()
@@ -51,7 +62,8 @@ class WindowsAgent:
             self.send("SHIFT_END")
         if self.authenticated:
             self.send("LOGOFF")
-        self.detector.stop()
+        if self.detector:
+            self.detector.stop()
 
 
 def main():

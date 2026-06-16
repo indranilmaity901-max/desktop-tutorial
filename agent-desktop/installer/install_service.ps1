@@ -4,6 +4,7 @@ param(
 )
 
 $agentPath = Join-Path $RepoPath "agent-desktop"
-$action = New-ScheduledTaskAction -Execute $PythonExe -Argument "-m windows_agent.main" -WorkingDirectory $agentPath
-$trigger = New-ScheduledTaskTrigger -AtLogOn
-Register-ScheduledTask -TaskName "WPACS Desktop Agent" -Action $action -Trigger $trigger -Description "Runs the WPACS Windows Desktop Agent at user logon."
+Push-Location $agentPath
+& $PythonExe -m windows_agent.service install --startup auto
+& $PythonExe -m windows_agent.service start
+Pop-Location

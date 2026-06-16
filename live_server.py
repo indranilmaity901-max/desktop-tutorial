@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parent
 SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "28800"))
 SESSIONS = {}
 RBAC_ROLES = ("ADMIN", "MANAGER", "SUPERVISOR")
-EVENT_TYPES = ("LOGIN", "LOGOUT", "LOGOFF", "LOCK", "UNLOCK", "HEARTBEAT", "SHIFT_START", "SHIFT_END")
+EVENT_TYPES = ("LOGIN", "LOGOUT", "LOGOFF", "LOCK", "UNLOCK", "IDLE", "HEARTBEAT", "SHIFT_START", "SHIFT_END")
 WEBSOCKET_CLIENTS = set()
 WEBSOCKET_LOCK = threading.Lock()
 
@@ -88,6 +88,7 @@ def audit_action_for_event(event_type):
         "LOGOFF": "Status Changed",
         "LOCK": "Status Changed",
         "UNLOCK": "Status Changed",
+        "IDLE": "Status Changed",
         "HEARTBEAT": "Status Changed",
     }[event_type]
 
@@ -122,7 +123,7 @@ def minutes_between(start_at, end_at):
 
 
 def derive_status(event_type):
-    if event_type in ("LOGIN", "UNLOCK", "HEARTBEAT", "SHIFT_START"):
+    if event_type in ("LOGIN", "UNLOCK", "IDLE", "HEARTBEAT", "SHIFT_START"):
         return "ONLINE", "ONLINE"
     if event_type == "LOCK":
         return "LOCKED", "ONLINE"
