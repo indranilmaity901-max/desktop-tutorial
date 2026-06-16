@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>WPACS Manager Dashboard</title>
+    <link rel="stylesheet" href="/frontend/styles/main.css">
+  </head>
+  <body>
+    <main>
+      <section class="panel">
+        <h1>Manager Live Monitoring</h1>
+        <table>
+          <thead>
+            <tr>
+              <th>Agent</th>
+              <th>Status</th>
+              <th>Connection</th>
+              <th>Last Heartbeat</th>
+              <th>Locked</th>
+              <th>Productive</th>
+              <th>Score</th>
+            </tr>
+          </thead>
+          <tbody id="liveRows"></tbody>
+        </table>
+      </section>
+    </main>
+    <script type="module" src="/frontend/manager/js/live_monitor.js"></script>
+  </body>
+</html>

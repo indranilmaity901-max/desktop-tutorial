@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>WPACS Agent Dashboard</title>
+    <link rel="stylesheet" href="/frontend/styles/main.css">
+  </head>
+  <body>
+    <main>
+      <section class="panel">
+        <h1>Agent Dashboard</h1>
+        <div class="grid" id="statusGrid"></div>
+        <p>
+          <button data-event="SHIFT_START">Start Shift</button>
+          <button data-event="SHIFT_END">End Shift</button>
+          <button data-event="HEARTBEAT">Heartbeat</button>
+        </p>
+      </section>
+      <section class="panel">
+        <h2>Live Event Feed</h2>
+        <table><tbody id="eventRows"></tbody></table>
+      </section>
+    </main>
+    <script type="module" src="/frontend/agent/js/shift.js"></script>
+  </body>
+</html>

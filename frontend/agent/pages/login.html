@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>WPACS Agent Login</title>
+    <link rel="stylesheet" href="/frontend/styles/main.css">
+  </head>
+  <body>
+    <main>
+      <form class="panel" id="loginForm">
+        <h1>Agent Login</h1>
+        <input name="username" autocomplete="username" required aria-label="Username">
+        <input name="password" autocomplete="current-password" type="password" required aria-label="Password">
+        <button type="submit">Login</button>
+        <p id="result"></p>
+      </form>
+    </main>
+    <script type="module" src="/frontend/agent/js/agent_api.js"></script>
+  </body>
+</html>
