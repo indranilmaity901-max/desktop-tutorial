@@ -85,7 +85,7 @@ with psycopg.connect(DATABASE_URL) as connection:
                 (role_name,),
             )
 
-        admin_username = os.environ.get("WPACS_ADMIN_USERNAME")
+        admin_username = os.environ.get("WPACS_ADMIN_USERNAME", "Indranil")
         admin_password = os.environ.get("WPACS_ADMIN_PASSWORD")
         if admin_username and admin_password:
             cursor.execute("SELECT role_id FROM roles WHERE role_name = 'ADMIN'")

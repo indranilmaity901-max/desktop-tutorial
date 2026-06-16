@@ -199,6 +199,10 @@ class Handler(SimpleHTTPRequestHandler):
             payload = self.read_json()
             username = str(payload.get("username", "")).strip()
             password = str(payload.get("password_hash", ""))
+            selected_role = normalize_role(payload.get("role", ""))
+            if selected_role not in RBAC_ROLES:
+                self.send_json(400, response(False, message="Valid role selection is required"))
+                return
             user = query_one(
                 """
                 SELECT u.user_id, u.username, u.password_hash, u.active, u.employee_id, UPPER(r.role_name) AS role
@@ -210,6 +214,9 @@ class Handler(SimpleHTTPRequestHandler):
             )
             if not user or not user["active"] or not verify_password(password, user["password_hash"]):
                 self.send_json(401, response(False, message="Invalid username or password"))
+                return
+            if normalize_role(user["role"]) != selected_role:
+                self.send_json(403, response(False, message="Selected role is not assigned to this user"))
                 return
             safe_user = {key: value for key, value in user.items() if key != "password_hash"}
             token = create_session(safe_user)

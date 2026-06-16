@@ -199,6 +199,14 @@ function loginPage() {
             </div>
           </div>
           <label>
+            <span>Role</span>
+            <select name="role" required>
+              <option value="ADMIN">ADMIN</option>
+              <option value="MANAGER">MANAGER</option>
+              <option value="SUPERVISOR">SUPERVISOR</option>
+            </select>
+          </label>
+          <label>
             <span>Username</span>
             <input name="username" autocomplete="username" required>
           </label>
@@ -491,7 +499,8 @@ function attachHandlers() {
           method: "POST",
           body: JSON.stringify({
             username: formData.get("username"),
-            password_hash: formData.get("password_hash")
+            password_hash: formData.get("password_hash"),
+            role: formData.get("role")
           })
         });
         const now = Date.now();
