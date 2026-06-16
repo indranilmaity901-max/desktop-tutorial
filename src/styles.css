@@ -1672,6 +1672,28 @@ h2 {
   min-height: 132px;
 }
 
+.agent-selector {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 14px;
+  max-width: 420px;
+}
+
+.agent-selector span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.agent-selector select {
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid rgba(91, 169, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(6, 16, 29, 0.72);
+  color: var(--text);
+}
+
 .agent-shift-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1719,6 +1741,47 @@ h2 {
 .agent-inner-panel {
   min-height: auto;
   box-shadow: none;
+}
+
+.agent-event-feed {
+  margin-top: 14px;
+}
+
+.panel-header.compact {
+  margin-bottom: 10px;
+}
+
+.panel-header.compact h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.event-feed-list {
+  display: grid;
+  gap: 8px;
+}
+
+.event-feed-list article {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(6, 16, 29, 0.62);
+}
+
+.event-feed-list strong {
+  color: #75bdff;
+  font-size: 13px;
+}
+
+.event-feed-list span,
+.event-feed-list small {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .agent-chart {

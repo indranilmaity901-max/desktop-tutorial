@@ -1,2 +1,2 @@
 psycopg[binary]==3.3.4
-pywin32==306; platform_system == "Windows"
+pywin32==312; platform_system == "Windows"

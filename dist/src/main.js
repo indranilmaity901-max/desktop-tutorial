@@ -14,6 +14,8 @@ const state = {
   agentDashboard: null,
   agentStatuses: [],
   dailyProductivity: [],
+  agentEvents: [],
+  selectedAgentId: "",
   liveSocket: null
 };
 
@@ -46,6 +48,20 @@ function minutesLabel(value) {
   return hours ? `${hours}h ${String(remainder).padStart(2, "0")}m` : `${remainder}m`;
 }
 
+function selectedAgentId() {
+  return state.user?.employee_id || state.selectedAgentId || state.employeeOptions[0]?.employee_id || "";
+}
+
+function currentStateLabel(status) {
+  if (status?.current_status === "LOCKED") {
+    return "LOCKED";
+  }
+  if (status?.shift_state === "ACTIVE") {
+    return "ACTIVE";
+  }
+  return "IDLE";
+}
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
     credentials: "same-origin",
@@ -65,7 +81,7 @@ async function api(path, options = {}) {
 function sidebar() {
   const role = state.user?.role || "";
   const operationItems = [
-    ...(state.user?.employee_id ? [["monitor-dot", "Agent", "#agent"]] : []),
+    ["monitor-dot", "Agent", "#agent"],
     ["activity", "Productivity", "#productivity"],
     ["file-bar-chart", "Reports", "#reports"]
   ];
@@ -227,7 +243,7 @@ function managerDashboard() {
       ${metricCard("Reports", state.reports.length, "Generated reports", "#reports")}
     </section>
     <div class="content-grid">
-      ${state.user?.employee_id ? agentDashboardPanel() : ""}
+      ${agentDashboardPanel()}
       ${role === "MANAGER" || role === "ADMIN" || role === "SUPERVISOR" ? managerLivePanel() : ""}
       ${canManageEmployees ? employeesPanel() : ""}
       ${attendancePanel()}
@@ -242,7 +258,13 @@ function agentDashboardPanel() {
   const status = state.agentDashboard?.status || {};
   const productivity = state.agentDashboard?.productivity || {};
   const attendance = state.agentDashboard?.attendance || [];
-  const canPostShift = state.user?.role !== "SUPERVISOR";
+  const activeAgentId = selectedAgentId();
+  const canPostShift = state.user?.role !== "SUPERVISOR" && Boolean(activeAgentId);
+  const agentOptions = state.employeeOptions.map((employee) => `
+    <option value="${escapeHtml(employee.employee_id)}" ${employee.employee_id === activeAgentId ? "selected" : ""}>
+      ${escapeHtml(employee.employee_name)} (${escapeHtml(employee.employee_id)})
+    </option>
+  `).join("");
   return `
     <section class="panel wide agent-dashboard-panel" id="agent">
       <div class="panel-header">
@@ -252,9 +274,17 @@ function agentDashboardPanel() {
         </div>
         <span class="state">${escapeHtml(status.connection_status || "OFFLINE")}</span>
       </div>
+      ${state.user?.employee_id ? "" : `
+        <label class="agent-selector">
+          <span>Agent</span>
+          <select id="agentSelector" ${state.employeeOptions.length ? "" : "disabled"}>
+            ${agentOptions || `<option value="">No scoped employees</option>`}
+          </select>
+        </label>
+      `}
       <div class="agent-dashboard-kpis">
-        <article class="agent-kpi-card"><span>Current Status</span><strong>${escapeHtml(status.current_status || "OFFLINE")}</strong></article>
-        <article class="agent-kpi-card"><span>Shift State</span><strong>${escapeHtml(status.shift_state || "NOT_STARTED")}</strong></article>
+        <article class="agent-kpi-card"><span>Agent Status</span><strong>${escapeHtml(status.connection_status || "OFFLINE")}</strong></article>
+        <article class="agent-kpi-card"><span>Current State</span><strong>${escapeHtml(currentStateLabel(status))}</strong></article>
         <article class="agent-kpi-card"><span>Today's Attendance</span><strong>${attendance.length ? escapeHtml(attendance[0].status) : "No record"}</strong></article>
         <article class="agent-kpi-card"><span>Last Heartbeat</span><strong>${formatDateTime(status.last_heartbeat_at)}</strong></article>
       </div>
@@ -270,10 +300,34 @@ function agentDashboardPanel() {
           <small>Last activity: ${formatDateTime(status.last_activity_at)}</small>
         </article>
         <article class="agent-inner-panel">
-          <span>Today's Productive Time</span>
+          <span>Productive Time</span>
           <strong>${minutesLabel(productivity.productive_minutes)}</strong>
-          <small>Score: ${escapeHtml(productivity.productivity_score ?? 0)}%</small>
+          <small>Locked time: ${minutesLabel(productivity.locked_minutes)}</small>
         </article>
+        <article class="agent-inner-panel">
+          <span>Productivity %</span>
+          <strong>${escapeHtml(productivity.productivity_score ?? 0)}%</strong>
+          <small>Shift state: ${escapeHtml(status.shift_state || "NOT_STARTED")}</small>
+        </article>
+      </div>
+      <div class="agent-event-feed">
+        <div class="panel-header compact">
+          <div>
+            <h3>Live Event Feed</h3>
+            <p>Recent workstation events from PostgreSQL.</p>
+          </div>
+        </div>
+        ${state.agentEvents.length ? `
+          <div class="event-feed-list">
+            ${state.agentEvents.map((event) => `
+              <article>
+                <strong>${escapeHtml(event.event_type)}</strong>
+                <span>${escapeHtml(event.employee_name || event.employee_id)} · ${formatDateTime(event.event_timestamp)}</span>
+                <small>${escapeHtml(event.source)}</small>
+              </article>
+            `).join("")}
+          </div>
+        ` : emptyState("No workstation events found.")}
       </div>
     </section>
   `;
@@ -666,12 +720,20 @@ function attachHandlers() {
     });
   }
 
+  const agentSelector = document.querySelector("#agentSelector");
+  if (agentSelector) {
+    agentSelector.addEventListener("change", async () => {
+      state.selectedAgentId = agentSelector.value;
+      await loadData();
+    });
+  }
+
   document.querySelectorAll("[data-agent-event]").forEach((button) => {
     button.addEventListener("click", async () => {
       await api("/api/v2/events", {
         method: "POST",
         body: JSON.stringify({
-          employee_id: state.user?.employee_id,
+          employee_id: selectedAgentId(),
           event_type: button.dataset.agentEvent,
           event_timestamp: new Date().toISOString(),
           source: "web"
@@ -718,7 +780,7 @@ function connectLiveSocket() {
   state.liveSocket = socket;
   socket.onmessage = async (event) => {
     const message = JSON.parse(event.data || "{}");
-    if (["agent_status", "attendance", "productivity"].includes(message.type)) {
+    if (["agent_status", "attendance", "productivity", "workstation_event"].includes(message.type)) {
       await loadData({ keepSocket: true });
     }
   };
@@ -745,7 +807,12 @@ async function loadData(options = {}) {
     state.users = role === "ADMIN" ? await api("/api/v1/users") : [];
     state.agentStatuses = await api("/api/v2/agent-status");
     state.dailyProductivity = await api(`/api/v2/productivity?date=${new Date().toISOString().slice(0, 10)}`);
-    state.agentDashboard = state.user?.employee_id ? await api("/api/v2/agent-dashboard") : null;
+    if (!state.selectedAgentId && !state.user?.employee_id) {
+      state.selectedAgentId = state.employeeOptions[0]?.employee_id || "";
+    }
+    const agentId = selectedAgentId();
+    state.agentDashboard = agentId ? await api(`/api/v2/agent-dashboard?employee_id=${encodeURIComponent(agentId)}`) : null;
+    state.agentEvents = agentId ? await api(`/api/v2/events?employee_id=${encodeURIComponent(agentId)}`) : [];
     if (!options.keepSocket) {
       connectLiveSocket();
     }

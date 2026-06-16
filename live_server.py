@@ -534,6 +534,44 @@ def productivity_rows(session, employee_id=None, target_date=None):
     )
 
 
+def workstation_event_rows(session, employee_id=None, limit=50):
+    role = normalize_role(session["user"].get("role"))
+    params = []
+    where = ["TRUE"]
+    if employee_id:
+        if not can_access_employee(session, employee_id):
+            return None
+        where.append("e.employee_id = %s")
+        params.append(employee_id)
+    elif role == "MANAGER":
+        where.append("e.manager_id = %s")
+        params.append(str(session["user"].get("user_id")))
+    elif role == "SUPERVISOR" and session["user"].get("employee_id"):
+        where.append("e.employee_id = %s")
+        params.append(str(session["user"].get("employee_id")))
+    elif role == "SUPERVISOR":
+        where.append("FALSE")
+    params.append(max(1, min(int(limit or 50), 200)))
+    return query(
+        f"""
+        SELECT
+          w.id,
+          w.employee_id,
+          e.employee_name,
+          w.event_type,
+          w.event_timestamp,
+          w.source,
+          w.created_at
+        FROM workstation_events w
+        JOIN employees e ON e.employee_id = w.employee_id
+        WHERE {' AND '.join(where)}
+        ORDER BY w.event_timestamp DESC, w.id DESC
+        LIMIT %s
+        """,
+        tuple(params),
+    )
+
+
 def todays_attendance_rows(session, employee_id):
     if not can_access_employee(session, employee_id):
         return None
@@ -751,6 +789,7 @@ class Handler(SimpleHTTPRequestHandler):
             productivity = calculate_productivity_for_day(employee_id, event_timestamp.date())
             attendance = sync_shift_attendance(employee_id, event_type, event_timestamp.date(), productivity)
             audit_event(session, audit_action_for_event(event_type), employee_id, f"{event_type} from {source}")
+            broadcast_live_update("workstation_event", event)
             broadcast_live_update("agent_status", status)
             broadcast_live_update("productivity", productivity)
             if attendance:
@@ -1044,6 +1083,24 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json(200, response(True, rows))
             return
 
+        if parsed.path == "/api/v2/events":
+            session = require_roles(self, "ADMIN", "MANAGER", "SUPERVISOR")
+            if not session:
+                return
+            params = urllib.parse.parse_qs(parsed.query)
+            employee_id = params.get("employee_id", [None])[0]
+            limit = params.get("limit", [50])[0]
+            try:
+                rows = workstation_event_rows(session, employee_id, limit)
+            except ValueError:
+                self.send_json(400, response(False, message="Invalid event limit"))
+                return
+            if rows is None:
+                self.send_json(403, response(False, message="Access denied for this employee"))
+                return
+            self.send_json(200, response(True, rows))
+            return
+
         if parsed.path == "/api/v2/productivity":
             session = require_roles(self, "ADMIN", "MANAGER", "SUPERVISOR")
             if not session:
@@ -1062,9 +1119,14 @@ class Handler(SimpleHTTPRequestHandler):
             session = require_roles(self, "ADMIN", "MANAGER", "SUPERVISOR")
             if not session:
                 return
-            employee_id = session["user"].get("employee_id")
+            params = urllib.parse.parse_qs(parsed.query)
+            requested_employee_id = params.get("employee_id", [None])[0]
+            employee_id = session["user"].get("employee_id") or requested_employee_id
             if not employee_id:
                 self.send_json(403, response(False, message="Authenticated user is not assigned to an employee"))
+                return
+            if not can_access_employee(session, str(employee_id)):
+                self.send_json(403, response(False, message="Access denied for this employee"))
                 return
             status_rows = agent_status_rows(session, str(employee_id))
             productivity = productivity_rows(session, str(employee_id), today_utc())
