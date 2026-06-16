@@ -9,6 +9,8 @@ const state = {
   reports: [],
   roles: [],
   users: [],
+  managers: [],
+  employeeOptions: [],
   agentProfile: {},
   heartbeat: readHeartbeat()
 };
@@ -100,12 +102,17 @@ async function api(path, options = {}) {
 
 function sidebar() {
   const role = state.user?.role || "";
+  const operationItems = [
+    ["activity", "Productivity", "#productivity"],
+    ["file-bar-chart", "Reports", "#reports"],
+    ...(role === "ADMIN" ? [["shield-alert", "Conflict Management", "#conflicts"]] : [])
+  ];
   const groups = [
     { title: "WPACS", items: [["radar", "Dashboard", "#dashboard", true]] },
     ...(role === "ADMIN" || role === "MANAGER"
       ? [{ title: "Workforce", items: [["users", "Employees", "#employees"], ["calendar-check", "Attendance", "#attendance"]] }]
       : [{ title: "Workforce", items: [["calendar-check", "Attendance", "#attendance"]] }]),
-    { title: "Operations", items: [["activity", "Productivity", "#productivity"], ["file-bar-chart", "Reports", "#reports"], ["shield-alert", "Conflict Management", "#conflicts"]] },
+    { title: "Operations", items: operationItems },
     ...(role === "ADMIN"
       ? [{ title: "Administration", items: [["user-cog", "Users", "#users"]] }]
       : [])
@@ -138,11 +145,16 @@ function sidebar() {
 }
 
 function topbar() {
+  const titles = {
+    ADMIN: "WPACS Admin Dashboard",
+    MANAGER: "WPACS Manager Dashboard",
+    SUPERVISOR: "WPACS Supervisor Dashboard"
+  };
   return `
     <header class="topbar">
       <div>
         <p class="eyebrow">${escapeHtml(state.user?.role || "WPACS")}</p>
-        <h1>WPACS Manager Dashboard</h1>
+        <h1>${titles[state.user?.role] || "WPACS Dashboard"}</h1>
       </div>
       <div class="topbar-actions">
         <span class="session-role">${escapeHtml(state.user?.role || "")}</span>
@@ -165,8 +177,20 @@ function metricCard(label, value, detail, href) {
   `;
 }
 
-function emptyState(text = "No employee records found.") {
+function emptyState(text = "No records available.") {
   return `<div class="empty-state">${escapeHtml(text)}</div>`;
+}
+
+function onboardingState() {
+  return `
+    <div class="empty-state">
+      <strong>Welcome to WPACS.</strong><br>
+      Step 1: Create Employee.<br>
+      Step 2: Assign Manager.<br>
+      Step 3: Mark Attendance.<br>
+      Step 4: View Productivity.
+    </div>
+  `;
 }
 
 function loginPage() {
@@ -237,13 +261,15 @@ function dashboardShell(content) {
 
 function managerDashboard() {
   const metrics = state.dashboard.metrics || {};
+  const productivityMetric = metrics.productivity_records > 0 ? `${metrics.productivity_score}%` : "Awaiting data";
   const role = state.user?.role || "";
   const canManageEmployees = role === "ADMIN" || role === "MANAGER";
   const canManageUsers = role === "ADMIN";
+  const canViewConflicts = role === "ADMIN";
   return dashboardShell(`
     <section class="kpi-grid" id="dashboard" aria-label="Manager KPIs">
       ${metricCard("Employees", metrics.employees || 0, "Live employee records", "#employees")}
-      ${metricCard("Productivity Score", `${metrics.productivity_score || 0}%`, "Average productivity", "#productivity")}
+      ${metricCard("Productivity Score", productivityMetric, "Average productivity", "#productivity")}
       ${metricCard("Attendance Records", metrics.attendance_records || 0, "Attendance rows", "#attendance")}
       ${metricCard("Reports", state.reports.length, "Generated reports", "#reports")}
     </section>
@@ -252,13 +278,16 @@ function managerDashboard() {
       ${attendancePanel()}
       ${productivityPanel()}
       ${reportsPanel()}
-      ${conflictPanel()}
+      ${canViewConflicts ? conflictPanel() : ""}
       ${canManageUsers ? usersPanel() : ""}
     </div>
   `);
 }
 
 function employeesPanel() {
+  const managerOptions = state.managers.map((manager) => `
+    <option value="${escapeHtml(manager.manager_id)}">${escapeHtml(manager.manager_name)}</option>
+  `).join("");
   return `
     <section class="panel wide" id="employees">
       <div class="panel-header">
@@ -267,11 +296,14 @@ function employeesPanel() {
           <p>Live employee records from PostgreSQL.</p>
         </div>
       </div>
-      <form class="employee-form" id="employeeForm">
+      <form class="employee-form" id="employeeForm" data-editing-id="">
         <input name="employee_id" required aria-label="Employee ID">
         <input name="employee_name" required aria-label="Employee name">
         <input name="department" required aria-label="Department">
-        <input name="manager_id" aria-label="Manager ID">
+        <select name="manager_id" aria-label="Manager">
+          <option value="">Assign Manager</option>
+          ${managerOptions}
+        </select>
         <select name="status" required aria-label="Status">
           <option value="ACTIVE">ACTIVE</option>
           <option value="INACTIVE">INACTIVE</option>
@@ -281,25 +313,32 @@ function employeesPanel() {
       ${state.employees.length ? `
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Employee</th><th>Department</th><th>Manager</th><th>Status</th></tr></thead>
+            <thead><tr><th>Employee</th><th>Department</th><th>Manager</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>
               ${state.employees.map((employee) => `
                 <tr>
                   <td><strong>${escapeHtml(employee.employee_name)}</strong><br><small>${escapeHtml(employee.employee_id)}</small></td>
                   <td>${escapeHtml(employee.department)}</td>
-                  <td>${escapeHtml(employee.manager_id || "")}</td>
+                  <td>${escapeHtml(employee.manager_name || "Unassigned")}</td>
                   <td><span class="state">${escapeHtml(employee.status)}</span></td>
+                  <td>
+                    <button class="text-button" type="button" data-edit-employee="${escapeHtml(employee.employee_id)}">${icon("pencil")} Edit</button>
+                    <button class="text-button danger" type="button" data-delete-employee="${escapeHtml(employee.employee_id)}">${icon("trash-2")} Delete</button>
+                  </td>
                 </tr>
               `).join("")}
             </tbody>
           </table>
         </div>
-      ` : emptyState()}
+      ` : onboardingState()}
     </section>
   `;
 }
 
 function attendancePanel(records = state.attendance) {
+  const employeeOptions = state.employeeOptions.map((employee) => `
+    <option value="${escapeHtml(employee.employee_id)}">${escapeHtml(employee.employee_name)} (${escapeHtml(employee.employee_id)})</option>
+  `).join("");
   return `
     <section class="panel wide" id="attendance">
       <div class="panel-header">
@@ -308,6 +347,22 @@ function attendancePanel(records = state.attendance) {
           <p>Live attendance records from PostgreSQL.</p>
         </div>
       </div>
+      ${state.employeeOptions.length ? `
+        <form class="employee-form" id="attendanceForm">
+          <select name="employee_id" required aria-label="Employee">
+            <option value="">Select Employee</option>
+            ${employeeOptions}
+          </select>
+          <input name="attendance_date" type="date" required aria-label="Attendance date">
+          <select name="status" required aria-label="Attendance status">
+            <option value="PRESENT">PRESENT</option>
+            <option value="ABSENT">ABSENT</option>
+            <option value="INACTIVE">INACTIVE</option>
+          </select>
+          <input name="worked_hours" type="number" step="0.25" min="0" required aria-label="Worked hours">
+          <button type="submit">${icon("calendar-plus")} Mark Attendance</button>
+        </form>
+      ` : emptyState("No employees available. Create an employee first.")}
       ${records.length ? `
         <div class="table-wrap">
           <table>
@@ -315,7 +370,7 @@ function attendancePanel(records = state.attendance) {
             <tbody>
               ${records.map((record) => `
                 <tr>
-                  <td>${escapeHtml(record.employee_id)}</td>
+                  <td><strong>${escapeHtml(record.employee_name || record.employee_id)}</strong><br><small>${escapeHtml(record.employee_id)}</small></td>
                   <td>${escapeHtml(record.attendance_date)}</td>
                   <td><span class="state">${escapeHtml(record.status)}</span></td>
                   <td>${escapeHtml(record.worked_hours)}</td>
@@ -345,7 +400,7 @@ function productivityPanel(records = state.productivity) {
             <tbody>
               ${records.map((record) => `
                 <tr>
-                  <td>${escapeHtml(record.employee_id)}</td>
+                  <td><strong>${escapeHtml(record.employee_name || record.employee_id)}</strong><br><small>${escapeHtml(record.employee_id)}</small></td>
                   <td>${escapeHtml(record.report_date)}</td>
                   <td>${escapeHtml(record.productive_hours)}</td>
                   <td>${escapeHtml(record.non_productive_hours)}</td>
@@ -355,7 +410,7 @@ function productivityPanel(records = state.productivity) {
             </tbody>
           </table>
         </div>
-      ` : emptyState("No productivity records found.")}
+      ` : emptyState("Awaiting productivity data.")}
     </section>
   `;
 }
@@ -544,14 +599,63 @@ function attachHandlers() {
     employeeForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const formData = new FormData(employeeForm);
-      await api("/api/v1/employees", {
-        method: "POST",
+      const editingId = employeeForm.dataset.editingId;
+      await api(editingId ? `/api/v1/employees/${encodeURIComponent(editingId)}` : "/api/v1/employees", {
+        method: editingId ? "PUT" : "POST",
         body: JSON.stringify({
           employee_id: formData.get("employee_id"),
           employee_name: formData.get("employee_name"),
           department: formData.get("department"),
           manager_id: formData.get("manager_id"),
           status: formData.get("status")
+        })
+      });
+      await loadData();
+    });
+  }
+
+  document.querySelectorAll("[data-edit-employee]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const employee = state.employees.find((item) => item.employee_id === button.dataset.editEmployee);
+      const form = document.querySelector("#employeeForm");
+      if (!employee || !form) {
+        return;
+      }
+      form.dataset.editingId = employee.employee_id;
+      form.elements.employee_id.value = employee.employee_id;
+      form.elements.employee_id.readOnly = true;
+      form.elements.employee_name.value = employee.employee_name;
+      form.elements.department.value = employee.department;
+      form.elements.manager_id.value = employee.manager_id || "";
+      form.elements.status.value = employee.status || "ACTIVE";
+      form.querySelector("button[type='submit']").innerHTML = `${icon("save")} Update Employee`;
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
+      form.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  });
+
+  document.querySelectorAll("[data-delete-employee]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const employeeId = button.dataset.deleteEmployee;
+      await api(`/api/v1/employees/${encodeURIComponent(employeeId)}`, { method: "DELETE" });
+      await loadData();
+    });
+  });
+
+  const attendanceForm = document.querySelector("#attendanceForm");
+  if (attendanceForm) {
+    attendanceForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const formData = new FormData(attendanceForm);
+      await api("/api/v1/attendance", {
+        method: "POST",
+        body: JSON.stringify({
+          employee_id: formData.get("employee_id"),
+          attendance_date: formData.get("attendance_date"),
+          status: formData.get("status"),
+          worked_hours: formData.get("worked_hours")
         })
       });
       await loadData();
@@ -584,6 +688,8 @@ async function loadData() {
     const role = state.user?.role || "";
     state.dashboard = await api("/api/v1/dashboard");
     state.employees = role === "ADMIN" || role === "MANAGER" ? await api("/api/v1/employees") : [];
+    state.employeeOptions = await api("/api/v1/employee-options");
+    state.managers = role === "ADMIN" || role === "MANAGER" ? await api("/api/v1/managers") : [];
     state.attendance = await api("/api/v1/attendance");
     state.productivity = await api("/api/v1/productivity");
     state.reports = await api("/api/v1/reports");

@@ -46,6 +46,17 @@ CREATE TABLE IF NOT EXISTS reports (
   generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS audit_log (
+  id BIGSERIAL PRIMARY KEY,
+  timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  actor TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target TEXT NOT NULL,
+  details TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_attendance_employee_date ON attendance(employee_id, attendance_date DESC);
 CREATE INDEX IF NOT EXISTS idx_productivity_employee_date ON productivity(employee_id, report_date DESC);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role_id);
+CREATE INDEX IF NOT EXISTS idx_employees_manager ON employees(manager_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp DESC);

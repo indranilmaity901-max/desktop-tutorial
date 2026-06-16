@@ -60,6 +60,17 @@ def execute(sql, params=()):
             return cursor.rowcount
 
 
+def audit_event(session, action, target, details=""):
+    actor = session["user"].get("username", "system") if session else "system"
+    execute(
+        """
+        INSERT INTO audit_log (actor, action, target, details)
+        VALUES (%s, %s, %s, %s)
+        """,
+        (actor, action, target, details),
+    )
+
+
 def hash_password(password):
     iterations = 260000
     salt = secrets.token_hex(16)
@@ -133,14 +144,38 @@ def employee_scope(session):
     return session["user"].get("employee_id")
 
 
+def manager_exists(manager_id):
+    if not manager_id:
+        return True
+    manager = query_one(
+        """
+        SELECT u.user_id
+        FROM users u
+        JOIN roles r ON r.role_id = u.role_id
+        WHERE u.user_id::text = %s
+          AND UPPER(r.role_name) = 'MANAGER'
+          AND u.active = TRUE
+        """,
+        (str(manager_id),),
+    )
+    return bool(manager)
+
+
+def employee_exists(employee_id):
+    if not employee_id:
+        return False
+    return bool(query_one("SELECT employee_id FROM employees WHERE employee_id = %s", (employee_id,)))
+
+
 def dashboard_payload():
     totals = query_one(
         """
         SELECT
           COUNT(*) AS employees,
-          COALESCE(ROUND(AVG(productivity_score)), 0) AS productivity_score,
+          ROUND(AVG(productivity_score)) AS productivity_score,
           COALESCE(SUM(productive_hours), 0) AS productive_hours,
-          COALESCE(SUM(non_productive_hours), 0) AS non_productive_hours
+          COALESCE(SUM(non_productive_hours), 0) AS non_productive_hours,
+          COUNT(p.productivity_id) AS productivity_records
         FROM employees e
         LEFT JOIN productivity p ON p.employee_id = e.employee_id
         """
@@ -165,9 +200,10 @@ def dashboard_payload():
     return {
         "metrics": {
             "employees": int(totals.get("employees") or 0),
-            "productivity_score": int(totals.get("productivity_score") or 0),
+            "productivity_score": int(totals["productivity_score"]) if totals.get("productivity_score") is not None else None,
             "productive_hours": float(totals.get("productive_hours") or 0),
             "non_productive_hours": float(totals.get("non_productive_hours") or 0),
+            "productivity_records": int(totals.get("productivity_records") or 0),
             "attendance_records": int(attendance.get("records") or 0),
             "worked_hours": float(attendance.get("worked_hours") or 0),
         },
@@ -246,8 +282,15 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/v1/attendance":
             payload = self.read_json()
             employee_id = payload.get("employee_id")
+            employee_count = query_one("SELECT COUNT(*) AS count FROM employees") or {}
+            if int(employee_count.get("count") or 0) == 0:
+                self.send_json(400, response(False, message="No employees available. Create an employee first."))
+                return
             if not employee_id:
                 self.send_json(400, response(False, message="Employee ID is required"))
+                return
+            if not employee_exists(employee_id):
+                self.send_json(400, response(False, message="Selected employee does not exist"))
                 return
             execute(
                 """
@@ -264,6 +307,17 @@ class Handler(SimpleHTTPRequestHandler):
             if not session:
                 return
             payload = self.read_json()
+            employee_id = str(payload.get("employee_id", "")).strip()
+            manager_id = str(payload.get("manager_id") or "").strip() or None
+            if not employee_id or not payload.get("employee_name") or not payload.get("department"):
+                self.send_json(400, response(False, message="Employee ID, name, and department are required"))
+                return
+            if employee_exists(employee_id):
+                self.send_json(409, response(False, message="Employee already exists"))
+                return
+            if not manager_exists(manager_id):
+                self.send_json(400, response(False, message="Manager must be an active MANAGER user"))
+                return
             employee = query_one(
                 """
                 INSERT INTO employees (employee_id, employee_name, department, manager_id, status)
@@ -271,13 +325,14 @@ class Handler(SimpleHTTPRequestHandler):
                 RETURNING employee_id, employee_name, department, manager_id, status, created_at
                 """,
                 (
-                    payload.get("employee_id"),
+                    employee_id,
                     payload.get("employee_name"),
                     payload.get("department"),
-                    payload.get("manager_id"),
+                    manager_id,
                     payload.get("status") or "ACTIVE",
                 ),
             )
+            audit_event(session, "Employee Created", employee_id, f"Created employee {payload.get('employee_name')}")
             self.send_json(201, response(True, employee, "Employee saved"))
             return
 
@@ -289,6 +344,9 @@ class Handler(SimpleHTTPRequestHandler):
             employee_id = payload.get("employee_id")
             if not employee_id:
                 self.send_json(400, response(False, message="Employee ID is required"))
+                return
+            if not employee_exists(employee_id):
+                self.send_json(400, response(False, message="Selected employee does not exist"))
                 return
             productivity = query_one(
                 """
@@ -350,6 +408,16 @@ class Handler(SimpleHTTPRequestHandler):
                 """,
                 (username, password_hash, role["role_id"], employee_id, normalize_bool(payload.get("active", True))),
             )
+            if existing_user:
+                if not normalize_bool(payload.get("active", True)):
+                    action = "User Disabled"
+                elif password:
+                    action = "Password Reset"
+                else:
+                    action = "User Updated"
+            else:
+                action = "User Created"
+            audit_event(session, action, username, f"Role {role_name}")
             self.send_json(201, response(True, user, "User account saved"))
             return
 
@@ -369,6 +437,65 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json(201, response(True, report, "Report generated"))
             return
 
+        self.send_json(404, response(False, message="Route not found"))
+
+    def do_PUT(self):
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path.startswith("/api/v1/employees/"):
+            session = require_roles(self, "ADMIN", "MANAGER")
+            if not session:
+                return
+            employee_id = urllib.parse.unquote(parsed.path.rsplit("/", 1)[-1])
+            payload = self.read_json()
+            manager_id = str(payload.get("manager_id") or "").strip() or None
+            if not employee_exists(employee_id):
+                self.send_json(404, response(False, message="Employee not found"))
+                return
+            if not payload.get("employee_name") or not payload.get("department"):
+                self.send_json(400, response(False, message="Employee name and department are required"))
+                return
+            if not manager_exists(manager_id):
+                self.send_json(400, response(False, message="Manager must be an active MANAGER user"))
+                return
+            employee = query_one(
+                """
+                UPDATE employees
+                SET employee_name = %s,
+                    department = %s,
+                    manager_id = %s,
+                    status = %s
+                WHERE employee_id = %s
+                RETURNING employee_id, employee_name, department, manager_id, status, created_at
+                """,
+                (
+                    payload.get("employee_name"),
+                    payload.get("department"),
+                    manager_id,
+                    payload.get("status") or "ACTIVE",
+                    employee_id,
+                ),
+            )
+            audit_event(session, "Employee Updated", employee_id, f"Updated employee {payload.get('employee_name')}")
+            self.send_json(200, response(True, employee, "Employee updated"))
+            return
+        self.send_json(404, response(False, message="Route not found"))
+
+    def do_DELETE(self):
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path.startswith("/api/v1/employees/"):
+            session = require_roles(self, "ADMIN", "MANAGER")
+            if not session:
+                return
+            employee_id = urllib.parse.unquote(parsed.path.rsplit("/", 1)[-1])
+            employee = query_one("SELECT employee_name FROM employees WHERE employee_id = %s", (employee_id,))
+            if not employee:
+                self.send_json(404, response(False, message="Employee not found"))
+                return
+            execute("DELETE FROM users WHERE employee_id = %s", (employee_id,))
+            execute("DELETE FROM employees WHERE employee_id = %s", (employee_id,))
+            audit_event(session, "Employee Deleted", employee_id, f"Deleted employee {employee.get('employee_name')}")
+            self.send_json(200, response(True, message="Employee deleted"))
+            return
         self.send_json(404, response(False, message="Route not found"))
 
     def do_GET(self):
@@ -402,9 +529,46 @@ class Handler(SimpleHTTPRequestHandler):
                 return
             self.send_json(200, response(True, query(
                 """
-                SELECT employee_id, employee_name, department, manager_id, status, created_at
+                SELECT
+                  e.employee_id,
+                  e.employee_name,
+                  e.department,
+                  e.manager_id,
+                  manager.username AS manager_name,
+                  e.status,
+                  e.created_at
+                FROM employees e
+                LEFT JOIN users manager ON manager.user_id::text = e.manager_id
+                ORDER BY e.created_at DESC, e.employee_name
+                """
+            )))
+            return
+
+        if parsed.path == "/api/v1/employee-options":
+            if not require_roles(self, "ADMIN", "MANAGER", "SUPERVISOR"):
+                return
+            self.send_json(200, response(True, query(
+                """
+                SELECT employee_id, employee_name, department, status
                 FROM employees
-                ORDER BY created_at DESC, employee_name
+                WHERE status = 'ACTIVE'
+                ORDER BY employee_name
+                """
+            )))
+            return
+
+        if parsed.path == "/api/v1/managers":
+            session = require_roles(self, "ADMIN", "MANAGER")
+            if not session:
+                return
+            self.send_json(200, response(True, query(
+                """
+                SELECT u.user_id::text AS manager_id, u.username AS manager_name
+                FROM users u
+                JOIN roles r ON r.role_id = u.role_id
+                WHERE UPPER(r.role_name) = 'MANAGER'
+                  AND u.active = TRUE
+                ORDER BY u.username
                 """
             )))
             return
@@ -442,19 +606,21 @@ class Handler(SimpleHTTPRequestHandler):
             if employee_id:
                 data = query(
                     """
-                    SELECT attendance_id, employee_id, attendance_date, status, worked_hours, created_at
-                    FROM attendance
-                    WHERE employee_id = %s
-                    ORDER BY attendance_date DESC
+                    SELECT a.attendance_id, a.employee_id, e.employee_name, a.attendance_date, a.status, a.worked_hours, a.created_at
+                    FROM attendance a
+                    JOIN employees e ON e.employee_id = a.employee_id
+                    WHERE a.employee_id = %s
+                    ORDER BY a.attendance_date DESC
                     """,
                     (employee_id,),
                 )
             else:
                 data = query(
                     """
-                    SELECT attendance_id, employee_id, attendance_date, status, worked_hours, created_at
-                    FROM attendance
-                    ORDER BY attendance_date DESC
+                    SELECT a.attendance_id, a.employee_id, e.employee_name, a.attendance_date, a.status, a.worked_hours, a.created_at
+                    FROM attendance a
+                    JOIN employees e ON e.employee_id = a.employee_id
+                    ORDER BY a.attendance_date DESC
                     """
                 )
             self.send_json(200, response(True, data))
@@ -469,22 +635,37 @@ class Handler(SimpleHTTPRequestHandler):
             if employee_id:
                 data = query(
                     """
-                    SELECT productivity_id, employee_id, productive_hours, non_productive_hours, productivity_score, report_date
-                    FROM productivity
-                    WHERE employee_id = %s
-                    ORDER BY report_date DESC
+                    SELECT p.productivity_id, p.employee_id, e.employee_name, p.productive_hours, p.non_productive_hours, p.productivity_score, p.report_date
+                    FROM productivity p
+                    JOIN employees e ON e.employee_id = p.employee_id
+                    WHERE p.employee_id = %s
+                    ORDER BY p.report_date DESC
                     """,
                     (employee_id,),
                 )
             else:
                 data = query(
                     """
-                    SELECT productivity_id, employee_id, productive_hours, non_productive_hours, productivity_score, report_date
-                    FROM productivity
-                    ORDER BY report_date DESC
+                    SELECT p.productivity_id, p.employee_id, e.employee_name, p.productive_hours, p.non_productive_hours, p.productivity_score, p.report_date
+                    FROM productivity p
+                    JOIN employees e ON e.employee_id = p.employee_id
+                    ORDER BY p.report_date DESC
                     """
                 )
             self.send_json(200, response(True, data))
+            return
+
+        if parsed.path == "/api/v1/audit-log":
+            if not require_roles(self, "ADMIN"):
+                return
+            self.send_json(200, response(True, query(
+                """
+                SELECT id, timestamp, actor, action, target, details
+                FROM audit_log
+                ORDER BY timestamp DESC
+                LIMIT 100
+                """
+            )))
             return
 
         if parsed.path == "/api/v1/reports":
